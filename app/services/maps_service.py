@@ -433,7 +433,7 @@ class MapsService:
                     # Use backend proxy instead of direct Google URLs
                     from urllib.parse import quote
                     photo_url = (
-                        f"http://10.0.2.2:8000/places/photo-proxy?"
+                        f"{settings.api_base_url}/places/photo-proxy?"
                         f"photo_name={quote(photo_name)}&max_width=400"
                     )
                     photos.append(PlacePhoto(
@@ -617,7 +617,7 @@ class MapsService:
                     # This solves authentication issues with Android client
                     from urllib.parse import quote
                     photo_url = (
-                        f"http://10.0.2.2:8000/places/photo-proxy?"
+                        f"{settings.api_base_url}/places/photo-proxy?"
                         f"photo_name={quote(photo_name)}&max_width=800"
                     )
                     photos.append(photo_url)

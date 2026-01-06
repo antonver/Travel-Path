@@ -88,6 +88,28 @@ class Settings(BaseSettings):
     PORT: int = Field(default=8000, description="HTTP server port")
     GRPC_PORT: int = Field(default=50051, description="gRPC server port")
     
+    # Base URL for photo proxying (auto-detected or set explicitly)
+    # For Render: https://travel-path.onrender.com
+    # For local: http://10.0.2.2:8000 (Android emulator)
+    BASE_URL: str = Field(
+        default="",
+        description="Base URL for API (leave empty to auto-detect from RENDER_EXTERNAL_URL)"
+    )
+    
+    @property
+    def api_base_url(self) -> str:
+        """Get the base URL for API endpoints"""
+        if self.BASE_URL:
+            return self.BASE_URL.rstrip('/')
+        
+        # Auto-detect from Render environment variable
+        render_url = os.environ.get('RENDER_EXTERNAL_URL')
+        if render_url:
+            return render_url.rstrip('/')
+        
+        # Default for local development (Android emulator)
+        return "http://10.0.2.2:8000"
+    
     @model_validator(mode='after')
     def validate_firebase_path(self):
         """Validate that Firebase credentials file exists"""

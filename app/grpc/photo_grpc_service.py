@@ -210,7 +210,8 @@ class PlacePhotoService:
             
             # Return proxy URL instead of direct MinIO URL
             # Android emulator can't access localhost:9000, so we use backend proxy
-            proxy_url = f"http://10.0.2.2:8000/photos/minio-proxy?path={object_path}"
+            from app.core.config import settings
+            proxy_url = f"{settings.api_base_url}/photos/minio-proxy?path={object_path}"
             return proxy_url
             
         except Exception as e:
@@ -279,12 +280,13 @@ class PlacePhotoService:
         import urllib.parse
         
         try:
+            from app.core.config import settings
             parsed = urllib.parse.urlparse(url)
             # Get path after bucket name
             path_parts = parsed.path.split('/', 2)  # ['', 'travel-photos', 'places/...']
             if len(path_parts) >= 3:
                 object_path = path_parts[2]  # 'places/...'
-                return f"http://10.0.2.2:8000/photos/minio-proxy?path={urllib.parse.quote(object_path)}"
+                return f"{settings.api_base_url}/photos/minio-proxy?path={urllib.parse.quote(object_path)}"
         except:
             pass
         

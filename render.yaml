@@ -34,6 +34,10 @@ services:
       - key: MINIO_REGION
         value: auto
       
+      # Base URL for API (for photo proxy URLs)
+      - key: BASE_URL
+        value: "https://travel-path.onrender.com"
+      
       # Python unbuffered output for logs
       - key: PYTHONUNBUFFERED
         value: "1"
