@@ -289,80 +289,65 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
                 f"Available: {len(quality_places)}, Using: {requested_places}"
             )
         
-        # Sort by distance for "Économique" route
+        # Sort by distance from start
         places_by_distance = sorted(quality_places, key=lambda p: p.distance or float('inf'))
         
-        # Sort by rating for "Recommandé" route
+        # Sort by rating (best first)
         places_by_rating = sorted(quality_places, key=lambda p: p.rating or 0, reverse=True)
         
-        # Define route configurations - ALL have the SAME number of places
-        # Key: Make routes MEANINGFULLY different
+        # NEW APPROACH: Create 3 routes with DIFFERENT place selections
+        # After building, sort by walking_distance to assign: Facile, Moyen, Difficile
+        
         route_configs = [
             {
-                "id": "route_1_economique",
-                "name": "Économique",
-                "description": "Proches et gratuits",  # Close and free
+                "id": "route_variant_1",
+                "selection": "closest",  # Closest places = shortest walking
                 "num_places": requested_places,
-                "selection": "economique",  # Closest + cheapest
-                "difficulty": "easy"
             },
             {
-                "id": "route_2_recommande",
-                "name": "Recommandé",
-                "description": "Meilleurs avis",  # Best reviews
+                "id": "route_variant_2", 
+                "selection": "best_rated",  # Best rated = medium distance
                 "num_places": requested_places,
-                "selection": "rating",  # Best rated places
-                "difficulty": "moderate"
             },
             {
-                "id": "route_3_confort",
-                "name": "Confort",
-                "description": "Expérience premium",  # Premium experience
+                "id": "route_variant_3",
+                "selection": "furthest_good",  # Good but further = longest walking
                 "num_places": requested_places,
-                "selection": "premium",  # Higher rated + some variety
-                "difficulty": "moderate"
             }
         ]
         
-        logger.info(f"⏱️ STEP 2: Building {len(route_configs)} route variants with {requested_places} places each...")
+        logger.info(f"⏱️ STEP 2: Building {len(route_configs)} route variants...")
         
         for idx, config in enumerate(route_configs, 1):
             try:
                 route_step_time = time.time()
-                logger.info(f"⏱️ STEP 2.{idx}: Building route '{config['name']}'...")
+                logger.info(f"⏱️ STEP 2.{idx}: Building route variant...")
                 
-                # Select places based on strategy - ALL routes get EXACTLY the same count
-                # Key: ensure routes are DIFFERENT from each other
-                if config["selection"] == "economique":
-                    # Économique: closest places (minimize travel distance = minimize cost)
+                # Select places based on strategy
+                if config["selection"] == "closest":
+                    # Closest places = shortest walking distance
                     selected_places = places_by_distance[:config["num_places"]]
                     
-                elif config["selection"] == "rating":
-                    # Recommandé: ONLY best rated places
+                elif config["selection"] == "best_rated":
+                    # Best rated places (may be further)
                     selected_places = places_by_rating[:config["num_places"]]
                     
-                elif config["selection"] == "premium":
-                    # Confort (Premium): Best rated that are NOT in Économique
-                    # Prioritize places that are different from Économique route
-                    economique_ids = set(p.google_place_id for p in places_by_distance[:config["num_places"]])
-                    
-                    # First, get highly rated places NOT in economique
-                    different_places = [p for p in places_by_rating if p.google_place_id not in economique_ids]
-                    
-                    # If enough different places, use them
-                    if len(different_places) >= config["num_places"]:
-                        selected_places = different_places[:config["num_places"]]
-                    else:
-                        # Not enough different places - use some overlap but prioritize different
-                        selected_places = different_places[:]
-                        for p in places_by_rating:
-                            if p.google_place_id not in [sp.google_place_id for sp in selected_places]:
+                elif config["selection"] == "furthest_good":
+                    # Good places that are further away
+                    # Skip closest ones, take from middle/far
+                    skip_count = min(len(quality_places) // 3, 5)
+                    further_places = places_by_distance[skip_count:]
+                    # Sort these by rating
+                    further_by_rating = sorted(further_places, key=lambda p: p.rating or 0, reverse=True)
+                    selected_places = further_by_rating[:config["num_places"]]
+                    # If not enough, add from closest
+                    if len(selected_places) < config["num_places"]:
+                        for p in places_by_distance:
+                            if p not in selected_places:
                                 selected_places.append(p)
                             if len(selected_places) >= config["num_places"]:
                                 break
-                        selected_places = selected_places[:config["num_places"]]
                 else:
-                    # Fallback
                     selected_places = quality_places[:config["num_places"]]
                 
                 # Ensure we have exactly the requested number
@@ -480,10 +465,10 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
                 # Convert route_points to LatLng objects
                 route_points = [LatLng(**point) for point in route_data["route_points"]]
                 
-                # Create RouteOption
+                # Create RouteOption (name will be assigned after sorting)
                 route_option = RouteOption(
                     id=config["id"],
-                    name=config["name"],
+                    name="",  # Will be set after sorting
                     total_distance=route_data["total_distance"],
                     walking_distance=route_data["walking_distance"],
                     difficulty=actual_difficulty,
@@ -498,13 +483,11 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
                 routes.append(route_option)
                 logger.info(
                     f"⏱️ STEP 2.{idx} DONE: {time.time() - route_step_time:.2f}s - "
-                    f"{config['name']}: {config['num_places']} places, "
                     f"{route_data['walking_distance']} walking, difficulty={actual_difficulty}"
                 )
                 
             except Exception as e:
                 logger.error(f"Error creating route {config['id']}: {str(e)}")
-                # Continue to next route instead of failing completely
                 continue
         
         if len(routes) == 0:
@@ -512,6 +495,25 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to generate any routes"
             )
+        
+        # Sort routes by walking distance (shortest first)
+        def parse_distance(d: str) -> float:
+            """Parse '4.2 km' to float 4.2"""
+            try:
+                return float(d.replace(" km", "").replace(",", "."))
+            except:
+                return 0.0
+        
+        routes.sort(key=lambda r: parse_distance(r.walking_distance))
+        
+        # Assign names based on difficulty (by walking distance)
+        difficulty_names = ["Facile", "Moyen", "Difficile"]
+        difficulty_ids = ["route_facile", "route_moyen", "route_difficile"]
+        
+        for i, route in enumerate(routes):
+            if i < len(difficulty_names):
+                route.name = difficulty_names[i]
+                route.id = difficulty_ids[i]
         
         elapsed_time = time.time() - start_time
         logger.info(
