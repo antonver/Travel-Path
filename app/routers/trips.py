@@ -213,9 +213,27 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
         maps_service.reset_failed_modes_cache()
         
         # 1. Geocode start_point
+        # First, get the city center coordinates for validation
+        city_center = maps_service._geocode_location(request.location)
+        
         if request.start_point.lat and request.start_point.lng:
-            start_coords = LatLng(lat=request.start_point.lat, lng=request.start_point.lng)
-            logger.info(f"Using provided coordinates: {start_coords.lat},{start_coords.lng}")
+            provided_coords = LatLng(lat=request.start_point.lat, lng=request.start_point.lng)
+            
+            # Check if provided coordinates are within reasonable distance from the city (100km)
+            distance_from_city = maps_service._calculate_distance(
+                city_center.lat, city_center.lng,
+                provided_coords.lat, provided_coords.lng
+            )
+            
+            if distance_from_city > 100:  # More than 100km from city center
+                logger.warning(
+                    f"⚠️ GPS coordinates ({provided_coords.lat},{provided_coords.lng}) are "
+                    f"{distance_from_city:.0f}km from {request.location}. Using city center instead."
+                )
+                start_coords = city_center
+            else:
+                start_coords = provided_coords
+                logger.info(f"Using provided coordinates: {start_coords.lat},{start_coords.lng}")
         elif request.start_point.address:
             # Если адрес не содержит город/страну, добавляем location
             address_to_geocode = request.start_point.address
