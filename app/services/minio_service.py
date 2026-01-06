@@ -1,5 +1,6 @@
 """
 MinIO Service for object storage operations
+Supports MinIO, Cloudflare R2, AWS S3, and other S3-compatible storage
 """
 from minio import Minio
 from minio.error import S3Error
@@ -12,29 +13,56 @@ import io
 logger = logging.getLogger(__name__)
 
 
+def clean_endpoint(endpoint: str) -> str:
+    """
+    Clean endpoint for MinIO client - remove protocol and paths
+    Examples:
+        https://abc123.r2.cloudflarestorage.com -> abc123.r2.cloudflarestorage.com
+        http://minio:9000 -> minio:9000
+        abc123.r2.cloudflarestorage.com/bucket -> abc123.r2.cloudflarestorage.com
+    """
+    # Remove protocol
+    endpoint = endpoint.replace("https://", "").replace("http://", "")
+    # Remove trailing slash and path
+    endpoint = endpoint.split("/")[0]
+    return endpoint
+
+
 class MinioService:
-    """Service for handling MinIO object storage operations"""
+    """Service for handling MinIO/S3-compatible object storage operations"""
     
     def __init__(self):
         """Initialize MinIO client"""
+        self.client = None
+        self.bucket_name = settings.MINIO_BUCKET_NAME
+        self.available = False
+        
         try:
+            # Clean endpoint (remove https://, paths, etc.)
+            endpoint = clean_endpoint(settings.MINIO_ENDPOINT)
+            
             self.client = Minio(
-                settings.MINIO_ENDPOINT,
+                endpoint,
                 access_key=settings.MINIO_ROOT_USER,
                 secret_key=settings.MINIO_ROOT_PASSWORD,
-                secure=settings.MINIO_USE_SSL
+                secure=settings.MINIO_USE_SSL,
+                region=getattr(settings, 'MINIO_REGION', None)
             )
-            self.bucket_name = settings.MINIO_BUCKET_NAME
-            logger.info(f"MinIO client initialized for endpoint: {settings.MINIO_ENDPOINT}")
+            self.available = True
+            logger.info(f"✅ MinIO/S3 client initialized for endpoint: {endpoint}")
         except Exception as e:
-            logger.error(f"Failed to initialize MinIO client: {str(e)}")
-            raise
+            logger.warning(f"⚠️ MinIO/S3 not available: {str(e)}")
+            logger.info("📝 Photo upload features will be disabled")
     
     def ensure_bucket_exists(self) -> None:
         """
         Check if bucket exists, create if it doesn't
         Should be called on application startup
         """
+        if not self.available or not self.client:
+            logger.info("⏭️ Skipping bucket check - storage not available")
+            return
+            
         try:
             if not self.client.bucket_exists(self.bucket_name):
                 self.client.make_bucket(self.bucket_name)
@@ -53,25 +81,23 @@ class MinioService:
                     ]
                 }
                 import json
-                self.client.set_bucket_policy(
-                    self.bucket_name,
-                    json.dumps(policy)
-                )
-                logger.info(f"Set public read policy for bucket: {self.bucket_name}")
+                try:
+                    self.client.set_bucket_policy(
+                        self.bucket_name,
+                        json.dumps(policy)
+                    )
+                    logger.info(f"Set public read policy for bucket: {self.bucket_name}")
+                except Exception as e:
+                    # R2 and some providers don't support bucket policies
+                    logger.warning(f"Could not set bucket policy (may be unsupported): {e}")
             else:
-                logger.info(f"Bucket already exists: {self.bucket_name}")
+                logger.info(f"✅ Bucket exists: {self.bucket_name}")
         except S3Error as e:
             logger.error(f"MinIO S3 error: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to ensure bucket exists: {str(e)}"
-            )
+            self.available = False
         except Exception as e:
             logger.error(f"Unexpected error ensuring bucket: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to ensure bucket exists: {str(e)}"
-            )
+            self.available = False
     
     async def upload_file(
         self,
@@ -79,7 +105,7 @@ class MinioService:
         object_name: str
     ) -> str:
         """
-        Upload a file to MinIO and return its URL
+        Upload a file to MinIO/S3 and return its URL
         
         Args:
             file: FastAPI UploadFile object
@@ -88,6 +114,12 @@ class MinioService:
         Returns:
             str: Direct URL to the uploaded file
         """
+        if not self.available or not self.client:
+            raise HTTPException(
+                status_code=503,
+                detail="Object storage not available"
+            )
+            
         try:
             # Read file content
             contents = await file.read()
@@ -96,7 +128,7 @@ class MinioService:
             # Determine content type
             content_type = file.content_type or "application/octet-stream"
             
-            # Upload to MinIO
+            # Upload to storage
             self.client.put_object(
                 bucket_name=self.bucket_name,
                 object_name=object_name,
@@ -105,20 +137,15 @@ class MinioService:
                 content_type=content_type
             )
             
-            # Construct URL
-            protocol = "https" if settings.MINIO_USE_SSL else "http"
-            # Use external endpoint for URL (assuming minio is accessible at localhost:9000)
-            external_endpoint = settings.MINIO_ENDPOINT.replace("minio", "localhost")
-            url = f"{protocol}://{external_endpoint}/{self.bucket_name}/{object_name}"
-            
+            url = self.get_file_url(object_name)
             logger.info(f"Successfully uploaded file: {object_name}")
             return url
             
         except S3Error as e:
-            logger.error(f"MinIO S3 error during upload: {str(e)}")
+            logger.error(f"S3 error during upload: {str(e)}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to upload file to MinIO: {str(e)}"
+                detail=f"Failed to upload file: {str(e)}"
             )
         except Exception as e:
             logger.error(f"Unexpected error during file upload: {str(e)}")
@@ -137,9 +164,20 @@ class MinioService:
         Returns:
             str: Public URL to the object
         """
+        endpoint = clean_endpoint(settings.MINIO_ENDPOINT)
         protocol = "https" if settings.MINIO_USE_SSL else "http"
-        external_endpoint = settings.MINIO_ENDPOINT.replace("minio", "localhost")
-        return f"{protocol}://{external_endpoint}/{self.bucket_name}/{object_name}"
+        
+        # For Cloudflare R2, use the public bucket URL format
+        if "r2.cloudflarestorage.com" in endpoint:
+            # R2 public access requires bucket to be set up with custom domain or R2.dev subdomain
+            # Using the S3-compatible endpoint for now
+            return f"{protocol}://{endpoint}/{self.bucket_name}/{object_name}"
+        
+        # For local development, replace internal hostname with localhost
+        if endpoint.startswith("minio:"):
+            endpoint = endpoint.replace("minio:", "localhost:")
+        
+        return f"{protocol}://{endpoint}/{self.bucket_name}/{object_name}"
     
     def get_place_photos(self, place_id: str, max_photos: int = 10) -> list[str]:
         """
@@ -155,6 +193,9 @@ class MinioService:
         Returns:
             List of photo URLs from MinIO
         """
+        if not self.available or not self.client:
+            return []
+            
         try:
             photo_urls = []
             
@@ -195,7 +236,7 @@ class MinioService:
             return photo_urls
             
         except S3Error as e:
-            logger.error(f"MinIO S3 error searching photos: {str(e)}")
+            logger.error(f"S3 error searching photos: {str(e)}")
             return []
         except Exception as e:
             logger.error(f"Error searching place photos: {str(e)}")

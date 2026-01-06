@@ -31,29 +31,28 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.PROJECT_NAME}")
     logger.info("=" * 60)
     
+    # Initialize MinIO bucket (optional - app works without it)
+    logger.info("Checking object storage...")
     try:
-        # Initialize MinIO bucket
-        logger.info("Initializing MinIO bucket...")
         minio_service.ensure_bucket_exists()
-        logger.info("✓ MinIO bucket ready")
-        
-        # Verify Firebase connection
-        logger.info("Verifying Firebase connection...")
-        # Firebase is already initialized in the service __init__
-        logger.info("✓ Firebase connected")
-        
-        # Verify Google Maps client
-        logger.info("Verifying Google Maps client...")
-        # Maps client is already initialized in the service __init__
-        logger.info("✓ Google Maps client ready")
-        
-        logger.info("=" * 60)
-        logger.info(f"{settings.PROJECT_NAME} is ready!")
-        logger.info("=" * 60)
-        
+        if minio_service.available:
+            logger.info("✓ Object storage ready")
+        else:
+            logger.warning("⚠️ Object storage not available - photo uploads disabled")
     except Exception as e:
-        logger.error(f"Failed to initialize services: {str(e)}")
-        raise
+        logger.warning(f"⚠️ Object storage error: {e} - photo uploads disabled")
+    
+    # Verify Firebase connection
+    logger.info("Verifying Firebase connection...")
+    logger.info("✓ Firebase connected")
+    
+    # Verify Google Maps client
+    logger.info("Verifying Google Maps client...")
+    logger.info("✓ Google Maps client ready")
+    
+    logger.info("=" * 60)
+    logger.info(f"{settings.PROJECT_NAME} is ready!")
+    logger.info("=" * 60)
     
     yield
     
@@ -121,7 +120,7 @@ async def health_check():
     services_status = {
         "api": "healthy",
         "firebase": "unknown",
-        "minio": "unknown"
+        "storage": "disabled"
     }
     
     # Check Firebase
@@ -131,16 +130,17 @@ async def health_check():
     except Exception as e:
         services_status["firebase"] = f"unhealthy: {str(e)[:50]}"
     
-    # Check MinIO
-    try:
-        minio_service.client.bucket_exists(minio_service.bucket_name)
-        services_status["minio"] = "healthy"
-    except Exception as e:
-        services_status["minio"] = f"unhealthy: {str(e)[:50]}"
+    # Check MinIO/S3 storage (optional)
+    if minio_service.available and minio_service.client:
+        try:
+            minio_service.client.bucket_exists(minio_service.bucket_name)
+            services_status["storage"] = "healthy"
+        except Exception as e:
+            services_status["storage"] = f"error: {str(e)[:50]}"
     
-    overall_status = "healthy" if all(
-        v == "healthy" for v in services_status.values()
-    ) else "degraded"
+    # API is healthy if Firebase works (storage is optional)
+    core_healthy = services_status["api"] == "healthy" and services_status["firebase"] == "healthy"
+    overall_status = "healthy" if core_healthy else "unhealthy"
     
     return {
         "status": overall_status,
