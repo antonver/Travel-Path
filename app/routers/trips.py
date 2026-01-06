@@ -318,29 +318,61 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
         
         logger.info(f"⏱️ STEP 2: Building {len(route_configs)} route variants...")
         
+        # Track used places to ensure variety between routes
+        used_place_ids = set()
+        
         for idx, config in enumerate(route_configs, 1):
             try:
                 route_step_time = time.time()
                 logger.info(f"⏱️ STEP 2.{idx}: Building route variant...")
                 
+                # Filter out already used places (for variety)
+                # Keep at least 50% new places in each route
+                min_new_places = config["num_places"] // 2
+                
+                # Available places excluding already used
+                available_by_distance = [p for p in places_by_distance if p.google_place_id not in used_place_ids]
+                available_by_rating = [p for p in places_by_rating if p.google_place_id not in used_place_ids]
+                
                 # Select places based on strategy
                 if config["selection"] == "closest":
                     # Closest places = shortest walking distance
-                    selected_places = places_by_distance[:config["num_places"]]
+                    # Prefer unused places, but fill with used if needed
+                    selected_places = available_by_distance[:config["num_places"]]
+                    if len(selected_places) < config["num_places"]:
+                        for p in places_by_distance:
+                            if p not in selected_places:
+                                selected_places.append(p)
+                            if len(selected_places) >= config["num_places"]:
+                                break
                     
                 elif config["selection"] == "best_rated":
-                    # Best rated places (may be further)
-                    selected_places = places_by_rating[:config["num_places"]]
+                    # Best rated places (may be further) - PREFER UNUSED
+                    selected_places = available_by_rating[:config["num_places"]]
+                    if len(selected_places) < config["num_places"]:
+                        for p in places_by_rating:
+                            if p not in selected_places:
+                                selected_places.append(p)
+                            if len(selected_places) >= config["num_places"]:
+                                break
                     
                 elif config["selection"] == "furthest_good":
-                    # Good places that are further away
-                    # Skip closest ones, take from middle/far
-                    skip_count = min(len(quality_places) // 3, 5)
-                    further_places = places_by_distance[skip_count:]
+                    # Good places that are further away - COMPLETELY DIFFERENT
+                    # Skip closest ones, take from far end
+                    skip_count = min(len(quality_places) // 2, config["num_places"])  # Skip more
+                    further_places = [p for p in places_by_distance[skip_count:] if p.google_place_id not in used_place_ids]
                     # Sort these by rating
                     further_by_rating = sorted(further_places, key=lambda p: p.rating or 0, reverse=True)
                     selected_places = further_by_rating[:config["num_places"]]
-                    # If not enough, add from closest
+                    # If not enough, add unused from middle range
+                    if len(selected_places) < config["num_places"]:
+                        middle_places = places_by_distance[skip_count//2:skip_count]
+                        for p in middle_places:
+                            if p not in selected_places and p.google_place_id not in used_place_ids:
+                                selected_places.append(p)
+                            if len(selected_places) >= config["num_places"]:
+                                break
+                    # Last resort: fill with any remaining
                     if len(selected_places) < config["num_places"]:
                         for p in places_by_distance:
                             if p not in selected_places:
@@ -349,6 +381,10 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
                                 break
                 else:
                     selected_places = quality_places[:config["num_places"]]
+                
+                # Mark these places as used for next iterations
+                for p in selected_places:
+                    used_place_ids.add(p.google_place_id)
                 
                 # Ensure we have exactly the requested number
                 if len(selected_places) != config["num_places"]:
@@ -436,16 +472,18 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
                     mode=request.transport_mode
                 )
                 
-                # Calculate average price
+                # Calculate MAX price (show highest price level from all places)
                 price_levels = [p.price_level for p in places_with_photos if p.price_level is not None]
                 if price_levels:
-                    avg_price_level = sum(price_levels) / len(price_levels)
-                    if avg_price_level <= 1:
+                    max_price_level = max(price_levels)
+                    if max_price_level <= 1:
                         avg_price = "$"
-                    elif avg_price_level <= 2:
+                    elif max_price_level <= 2:
                         avg_price = "$$"
-                    else:
+                    elif max_price_level <= 3:
                         avg_price = "$$$"
+                    else:
+                        avg_price = "$$$$"
                 else:
                     avg_price = "$"
                 
