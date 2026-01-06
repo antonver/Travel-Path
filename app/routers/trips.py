@@ -295,18 +295,24 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
         # Sort by rating for "Recommandé" route
         places_by_rating = sorted(quality_places, key=lambda p: p.rating or 0, reverse=True)
         
+        # Sort by price (low to high) for variety - FREE places first
+        places_by_price = sorted(quality_places, key=lambda p: p.price_level or 0)
+        
         # Define route configurations - ALL have the SAME number of places
+        # Key: Make routes MEANINGFULLY different
         route_configs = [
             {
                 "id": "route_1_economique",
                 "name": "Économique",
+                "description": "Proches et gratuits",  # Close and free
                 "num_places": requested_places,
-                "selection": "distance",  # Closest places = less travel
+                "selection": "economique",  # Closest + cheapest
                 "difficulty": "easy"
             },
             {
                 "id": "route_2_recommande",
                 "name": "Recommandé",
+                "description": "Meilleurs avis",  # Best reviews
                 "num_places": requested_places,
                 "selection": "rating",  # Best rated places
                 "difficulty": "moderate"
@@ -314,8 +320,9 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
             {
                 "id": "route_3_confort",
                 "name": "Confort",
+                "description": "Expérience premium",  # Premium experience
                 "num_places": requested_places,
-                "selection": "balanced",  # Mix of best rated and closest
+                "selection": "premium",  # Higher rated + some variety
                 "difficulty": "moderate"
             }
         ]
@@ -328,31 +335,45 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
                 logger.info(f"⏱️ STEP 2.{idx}: Building route '{config['name']}'...")
                 
                 # Select places based on strategy - ALL routes get EXACTLY the same count
-                if config["selection"] == "distance":
-                    # Économique: closest places (minimize travel distance/cost)
-                    selected_places = places_by_distance[:config["num_places"]]
+                # Key: ensure routes are DIFFERENT from each other
+                if config["selection"] == "economique":
+                    # Économique: closest AND cheapest places (free/low cost)
+                    # Score = distance_rank + price_rank (lower is better)
+                    scored_places = []
+                    for i, p in enumerate(places_by_distance):
+                        price_rank = places_by_price.index(p) if p in places_by_price else len(places_by_price)
+                        score = i + price_rank  # Lower = closer + cheaper
+                        scored_places.append((p, score))
+                    scored_places.sort(key=lambda x: x[1])
+                    selected_places = [p[0] for p in scored_places[:config["num_places"]]]
+                    
                 elif config["selection"] == "rating":
-                    # Recommandé: best rated places
+                    # Recommandé: ONLY best rated places
                     selected_places = places_by_rating[:config["num_places"]]
-                else:  # balanced
-                    # Confort: mix of top rated and closest
-                    # Take top 50% by rating + top 50% by distance (avoiding duplicates)
-                    half = config["num_places"] // 2
-                    top_rated = set(p.google_place_id for p in places_by_rating[:half])
-                    selected = places_by_rating[:half]
                     
-                    # Add closest places not already in the list
-                    for place in places_by_distance:
-                        if place.google_place_id not in top_rated and len(selected) < config["num_places"]:
-                            selected.append(place)
+                elif config["selection"] == "premium":
+                    # Confort (Premium): Best rated that are NOT in Économique
+                    # Prioritize places that are different from Économique route
+                    economique_ids = set(p.google_place_id for p in places_by_distance[:config["num_places"]])
                     
-                    # If still not enough, add any remaining
-                    if len(selected) < config["num_places"]:
-                        for place in quality_places:
-                            if place not in selected and len(selected) < config["num_places"]:
-                                selected.append(place)
+                    # First, get highly rated places NOT in economique
+                    different_places = [p for p in places_by_rating if p.google_place_id not in economique_ids]
                     
-                    selected_places = selected[:config["num_places"]]
+                    # If enough different places, use them
+                    if len(different_places) >= config["num_places"]:
+                        selected_places = different_places[:config["num_places"]]
+                    else:
+                        # Not enough different places - use some overlap but prioritize different
+                        selected_places = different_places[:]
+                        for p in places_by_rating:
+                            if p.google_place_id not in [sp.google_place_id for sp in selected_places]:
+                                selected_places.append(p)
+                            if len(selected_places) >= config["num_places"]:
+                                break
+                        selected_places = selected_places[:config["num_places"]]
+                else:
+                    # Fallback
+                    selected_places = quality_places[:config["num_places"]]
                 
                 # Ensure we have exactly the requested number
                 if len(selected_places) != config["num_places"]:
