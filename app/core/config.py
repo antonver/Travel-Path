@@ -4,10 +4,33 @@ Supports both local development and cloud deployment (Render, etc.)
 """
 from pydantic_settings import BaseSettings
 from pydantic import Field, field_validator, model_validator
-from typing import Optional
+from typing import Optional, Any
 import os
 import json
-import tempfile
+
+
+def setup_firebase_from_json():
+    """
+    If FIREBASE_CREDENTIALS_JSON env var is set, write it to a temp file.
+    This runs BEFORE Settings validation.
+    """
+    json_creds = os.environ.get('FIREBASE_CREDENTIALS_JSON')
+    if json_creds:
+        try:
+            creds = json.loads(json_creds)
+            temp_path = "/tmp/firebase_credentials.json"
+            with open(temp_path, 'w') as f:
+                json.dump(creds, f)
+            os.environ['FIREBASE_CREDENTIALS_PATH'] = temp_path
+            print(f"✅ Firebase credentials written to {temp_path}")
+            return temp_path
+        except json.JSONDecodeError as e:
+            print(f"❌ Invalid FIREBASE_CREDENTIALS_JSON: {e}")
+    return None
+
+
+# Setup Firebase credentials before Settings loads
+_firebase_path = setup_firebase_from_json()
 
 
 class Settings(BaseSettings):
@@ -29,7 +52,7 @@ class Settings(BaseSettings):
     )
     FIRESTORE_DATABASE: str = Field(
         default="default",
-        description="Firestore database name (use 'default' for named database or '(default)' for default)"
+        description="Firestore database name"
     )
     
     # Google Maps
@@ -66,34 +89,13 @@ class Settings(BaseSettings):
     GRPC_PORT: int = Field(default=50051, description="gRPC server port")
     
     @model_validator(mode='after')
-    def setup_firebase_credentials(self):
-        """
-        If FIREBASE_CREDENTIALS_JSON is provided, write it to a temp file
-        and update FIREBASE_CREDENTIALS_PATH
-        """
-        if self.FIREBASE_CREDENTIALS_JSON:
-            try:
-                # Validate JSON
-                creds = json.loads(self.FIREBASE_CREDENTIALS_JSON)
-                
-                # Write to temp file
-                temp_path = "/tmp/firebase_credentials.json"
-                with open(temp_path, 'w') as f:
-                    json.dump(creds, f)
-                
-                # Update path
-                object.__setattr__(self, 'FIREBASE_CREDENTIALS_PATH', temp_path)
-                print(f"✅ Firebase credentials written to {temp_path}")
-            except json.JSONDecodeError as e:
-                raise ValueError(f"Invalid FIREBASE_CREDENTIALS_JSON: {e}")
-        
-        # Validate file exists
+    def validate_firebase_path(self):
+        """Validate that Firebase credentials file exists"""
         if not os.path.exists(self.FIREBASE_CREDENTIALS_PATH):
             raise ValueError(
                 f"Firebase credentials file not found at: {self.FIREBASE_CREDENTIALS_PATH}. "
-                f"Set FIREBASE_CREDENTIALS_JSON or mount serviceAccountKey.json"
+                f"Set FIREBASE_CREDENTIALS_JSON environment variable or mount serviceAccountKey.json"
             )
-        
         return self
     
     @field_validator("MAPS_API_KEY")

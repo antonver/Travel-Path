@@ -2,30 +2,25 @@
 # Deploy: Connect GitHub repo and Render will auto-detect this file
 
 services:
-  # Main Backend API
   - type: web
     name: travelpath-backend
     runtime: docker
     dockerfilePath: ./Dockerfile.production
     dockerContext: .
-    plan: starter  # $7/month, or use 'free' for testing
+    plan: free  # Use 'starter' ($7/month) for production
     
-    # Health check
+    # Health check endpoint
     healthCheckPath: /health
     
-    # Environment variables
+    # Environment variables (secrets set in Dashboard)
     envVars:
-      # Firebase (set these in Render dashboard as secrets)
+      # Required: Set these in Render Dashboard as secrets!
       - key: FIREBASE_CREDENTIALS_JSON
-        sync: false  # Set manually in dashboard
-      
-      # Google Maps API Key
+        sync: false
       - key: MAPS_API_KEY
         sync: false
       
-      # MinIO / S3 Compatible Storage
-      # Option 1: Use Render's upcoming Object Storage
-      # Option 2: Use AWS S3, Cloudflare R2, or Backblaze B2
+      # S3-compatible storage (Cloudflare R2, AWS S3, etc.)
       - key: MINIO_ENDPOINT
         sync: false
       - key: MINIO_ROOT_USER
@@ -36,21 +31,13 @@ services:
         value: travel-photos
       - key: MINIO_USE_SSL
         value: "true"
+      - key: MINIO_REGION
+        value: auto
       
-      # Firestore database name
-      - key: FIRESTORE_DATABASE
-        value: default
-      
-      # Server settings
-      - key: PORT
-        value: "8000"
-      - key: GRPC_PORT
-        value: "50051"
-      
-      # Python settings
+      # Python unbuffered output for logs
       - key: PYTHONUNBUFFERED
         value: "1"
 
-# Note: For gRPC (port 50051), you'll need to use Render's Private Services
-# or set up a TCP proxy. Standard web services only support HTTP.
+# Note: gRPC requires Private Services or external proxy.
+# REST API at /photos/upload is available for photo uploads.
 

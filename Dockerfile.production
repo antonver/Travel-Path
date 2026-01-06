@@ -19,21 +19,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY ./app ./app
 
-# Copy proto generated files (already generated)
-COPY ./app/grpc/photo_service_pb2.py ./app/grpc/
-COPY ./app/grpc/photo_service_pb2_grpc.py ./app/grpc/
+# Create directory for temp files
+RUN mkdir -p /tmp
 
-# Create directory for Firebase credentials (will be mounted as secret)
-RUN mkdir -p /app/secrets
+# Default port (Render overrides with PORT env var)
+ENV PORT=10000
 
-# Expose ports
-EXPOSE 8000
-EXPOSE 50051
+# Expose port (Render uses 10000 by default)
+EXPOSE 10000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# Health check using dynamic port
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# Run the application (production mode, no reload)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Run with shell to expand $PORT variable
+CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
 
