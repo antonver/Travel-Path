@@ -77,6 +77,21 @@ class FirebaseService:
             logger.exception("Full traceback:")
             raise
     
+    def test_connection(self) -> bool:
+        """
+        Test Firestore connection by listing collections
+        
+        Returns:
+            True if connection is successful
+        """
+        try:
+            # Try to list collections - this will fail if connection is broken
+            list(self.db.collections())
+            return True
+        except Exception as e:
+            logger.error(f"Firestore connection test failed: {e}")
+            raise
+    
     def add_photo_to_trip(
         self,
         trip_id: str,
