@@ -295,9 +295,6 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
         # Sort by rating for "Recommandé" route
         places_by_rating = sorted(quality_places, key=lambda p: p.rating or 0, reverse=True)
         
-        # Sort by price (low to high) for variety - FREE places first
-        places_by_price = sorted(quality_places, key=lambda p: p.price_level or 0)
-        
         # Define route configurations - ALL have the SAME number of places
         # Key: Make routes MEANINGFULLY different
         route_configs = [
@@ -337,15 +334,8 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
                 # Select places based on strategy - ALL routes get EXACTLY the same count
                 # Key: ensure routes are DIFFERENT from each other
                 if config["selection"] == "economique":
-                    # Économique: closest AND cheapest places (free/low cost)
-                    # Score = distance_rank + price_rank (lower is better)
-                    scored_places = []
-                    for i, p in enumerate(places_by_distance):
-                        price_rank = places_by_price.index(p) if p in places_by_price else len(places_by_price)
-                        score = i + price_rank  # Lower = closer + cheaper
-                        scored_places.append((p, score))
-                    scored_places.sort(key=lambda x: x[1])
-                    selected_places = [p[0] for p in scored_places[:config["num_places"]]]
+                    # Économique: closest places (minimize travel distance = minimize cost)
+                    selected_places = places_by_distance[:config["num_places"]]
                     
                 elif config["selection"] == "rating":
                     # Recommandé: ONLY best rated places
