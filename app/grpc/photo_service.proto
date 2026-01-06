@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package photo;
+
+// Service for receiving photos from partner application
+service PhotoService {
+    // Upload a photo with place information
+    rpc UploadPlacePhoto(PlacePhotoRequest) returns (PlacePhotoResponse);
+    
+    // Stream multiple photos
+    rpc UploadPlacePhotoBatch(stream PlacePhotoRequest) returns (BatchPhotoResponse);
+}
+
+// Photo upload request
+message PlacePhotoRequest {
+    // Photo data (binary)
+    bytes photo_data = 1;
+    
+    // Photo file name
+    string filename = 2;
+    
+    // Content type (image/jpeg, image/png, etc.)
+    string content_type = 3;
+    
+    // Place information
+    PlaceInfo place_info = 4;
+    
+    // Source app identifier (e.g., "instagram_clone")
+    string source_app = 5;
+    
+    // User ID from source app (optional)
+    string source_user_id = 6;
+}
+
+// Place information
+message PlaceInfo {
+    // Place name
+    string name = 1;
+    
+    // Place address
+    string address = 2;
+    
+    // City
+    string city = 3;
+    
+    // Country (optional)
+    string country = 4;
+    
+    // Coordinates
+    double latitude = 5;
+    double longitude = 6;
+    
+    // Google Place ID (if known)
+    string google_place_id = 7;
+    
+    // Place types (e.g., "bar", "restaurant")
+    repeated string types = 8;
+}
+
+// Upload response
+message PlacePhotoResponse {
+    // Success status
+    bool success = 1;
+    
+    // Photo URL in MinIO
+    string photo_url = 2;
+    
+    // Generated photo ID
+    string photo_id = 3;
+    
+    // Error message (if any)
+    string error_message = 4;
+    
+    // Matched Google Place ID (if found)
+    string matched_place_id = 5;
+}
+
+// Batch upload response
+message BatchPhotoResponse {
+    // Number of successfully uploaded photos
+    int32 success_count = 1;
+    
+    // Number of failed uploads
+    int32 failed_count = 2;
+    
+    // Individual responses
+    repeated PlacePhotoResponse responses = 3;
+}
+

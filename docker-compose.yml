@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  minio:
+    image: minio/minio
+    container_name: travel-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - travel-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: travel-backend
+    ports:
+      - "8000:8000"
+      - "50051:50051"  # gRPC port for partner app
+    volumes:
+      - ./app:/app/app
+      - ./serviceAccountKey.json:/app/serviceAccountKey.json:ro
+    environment:
+      PROJECT_NAME: ${PROJECT_NAME}
+      FIREBASE_CREDENTIALS_PATH: ${FIREBASE_CREDENTIALS_PATH}
+      MAPS_API_KEY: ${MAPS_API_KEY}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - travel-network
+    restart: unless-stopped
+
+networks:
+  travel-network:
+    driver: bridge
+

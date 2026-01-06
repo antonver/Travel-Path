@@ -1,0 +1,56 @@
+# Render Blueprint - TravelPath Backend
+# Deploy: Connect GitHub repo and Render will auto-detect this file
+
+services:
+  # Main Backend API
+  - type: web
+    name: travelpath-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile.production
+    dockerContext: .
+    plan: starter  # $7/month, or use 'free' for testing
+    
+    # Health check
+    healthCheckPath: /health
+    
+    # Environment variables
+    envVars:
+      # Firebase (set these in Render dashboard as secrets)
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false  # Set manually in dashboard
+      
+      # Google Maps API Key
+      - key: MAPS_API_KEY
+        sync: false
+      
+      # MinIO / S3 Compatible Storage
+      # Option 1: Use Render's upcoming Object Storage
+      # Option 2: Use AWS S3, Cloudflare R2, or Backblaze B2
+      - key: MINIO_ENDPOINT
+        sync: false
+      - key: MINIO_ROOT_USER
+        sync: false
+      - key: MINIO_ROOT_PASSWORD
+        sync: false
+      - key: MINIO_BUCKET_NAME
+        value: travel-photos
+      - key: MINIO_USE_SSL
+        value: "true"
+      
+      # Firestore database name
+      - key: FIRESTORE_DATABASE
+        value: default
+      
+      # Server settings
+      - key: PORT
+        value: "8000"
+      - key: GRPC_PORT
+        value: "50051"
+      
+      # Python settings
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+# Note: For gRPC (port 50051), you'll need to use Render's Private Services
+# or set up a TCP proxy. Standard web services only support HTTP.
+

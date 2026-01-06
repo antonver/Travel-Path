@@ -1,0 +1,170 @@
+// =================================================================
+// TravelPath Photo Service - gRPC Protocol Definition
+// =================================================================
+// Server: travelpath-backend:50051 (or your-server-ip:50051)
+// 
+// This service allows partner applications to upload photos
+// of places that will be displayed in TravelPath routes.
+// 
+// User-uploaded photos are shown FIRST in the photo carousel,
+// before Google Places photos.
+// =================================================================
+
+syntax = "proto3";
+
+package photo;
+
+option java_package = "com.travelpath.grpc";
+option java_outer_classname = "PhotoServiceProto";
+option objc_class_prefix = "TPS";
+
+// =================================================================
+// PhotoService - Main service for photo uploads
+// =================================================================
+service PhotoService {
+    // Upload a single photo with place information
+    // Use this for individual photo uploads
+    rpc UploadPlacePhoto(PlacePhotoRequest) returns (PlacePhotoResponse);
+    
+    // Upload multiple photos in a stream (batch upload)
+    // Use this when uploading many photos at once for efficiency
+    rpc UploadPlacePhotoBatch(stream PlacePhotoRequest) returns (BatchPhotoResponse);
+}
+
+// =================================================================
+// Request Messages
+// =================================================================
+
+// Request to upload a photo
+message PlacePhotoRequest {
+    // Photo binary data (JPEG, PNG, WebP supported)
+    // Max size: 50MB
+    bytes photo_data = 1;
+    
+    // Original filename (e.g., "IMG_2024.jpg")
+    string filename = 2;
+    
+    // MIME type: "image/jpeg", "image/png", "image/webp"
+    string content_type = 3;
+    
+    // Information about the place where photo was taken
+    PlaceInfo place_info = 4;
+    
+    // Your application identifier (e.g., "instagram_clone", "photo_share_app")
+    string source_app = 5;
+    
+    // User ID from your application (for tracking/attribution)
+    string source_user_id = 6;
+}
+
+// Information about the place
+message PlaceInfo {
+    // Place name (required)
+    // Example: "La Panacée", "Eiffel Tower"
+    string name = 1;
+    
+    // Full address (optional but recommended)
+    // Example: "14 Rue de l'École de Pharmacie"
+    string address = 2;
+    
+    // City name (required)
+    // Example: "Montpellier", "Paris"
+    string city = 3;
+    
+    // Country (optional)
+    // Example: "France"
+    string country = 4;
+    
+    // GPS Coordinates (required)
+    // Latitude: -90 to 90
+    double latitude = 5;
+    // Longitude: -180 to 180
+    double longitude = 6;
+    
+    // Google Place ID if known (optional)
+    // If not provided, server will try to match by coordinates/name
+    // Example: "ChIJofpYVAivthIRXw08nwXMzco"
+    string google_place_id = 7;
+    
+    // Place types/categories (optional)
+    // Examples: ["restaurant", "cafe"], ["museum", "tourist_attraction"]
+    repeated string types = 8;
+}
+
+// =================================================================
+// Response Messages
+// =================================================================
+
+// Response for single photo upload
+message PlacePhotoResponse {
+    // True if upload was successful
+    bool success = 1;
+    
+    // URL where photo is accessible (for verification)
+    // Note: This URL is proxied through TravelPath backend
+    string photo_url = 2;
+    
+    // Unique photo ID (save this for potential deletion)
+    string photo_id = 3;
+    
+    // Error message if success=false
+    string error_message = 4;
+    
+    // Google Place ID that was matched (useful for verification)
+    // May be populated even if you didn't provide google_place_id
+    string matched_place_id = 5;
+}
+
+// Response for batch upload
+message BatchPhotoResponse {
+    // Number of successfully uploaded photos
+    int32 success_count = 1;
+    
+    // Number of failed uploads
+    int32 failed_count = 2;
+    
+    // Individual responses for each photo
+    repeated PlacePhotoResponse responses = 3;
+}
+
+// =================================================================
+// Example Usage (Python)
+// =================================================================
+// 
+// import grpc
+// import photo_service_pb2
+// import photo_service_pb2_grpc
+// 
+// # Connect to TravelPath server
+// channel = grpc.insecure_channel('travelpath-server:50051')
+// stub = photo_service_pb2_grpc.PhotoServiceStub(channel)
+// 
+// # Read photo file
+// with open('my_photo.jpg', 'rb') as f:
+//     photo_data = f.read()
+// 
+// # Create place info
+// place_info = photo_service_pb2.PlaceInfo(
+//     name="La Panacée",
+//     city="Montpellier",
+//     latitude=43.6125496,
+//     longitude=3.8781073
+// )
+// 
+// # Create request
+// request = photo_service_pb2.PlacePhotoRequest(
+//     photo_data=photo_data,
+//     filename="my_photo.jpg",
+//     content_type="image/jpeg",
+//     place_info=place_info,
+//     source_app="my_instagram_clone",
+//     source_user_id="user_123"
+// )
+// 
+// # Upload
+// response = stub.UploadPlacePhoto(request)
+// print(f"Success: {response.success}")
+// print(f"Photo ID: {response.photo_id}")
+// 
+// =================================================================
+
