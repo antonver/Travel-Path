@@ -4,6 +4,7 @@
 # =================================================================
 # Run this script on a fresh Ubuntu droplet to set up the backend
 # Uses Cloudflare R2 for object storage
+# Caddy for automatic HTTPS
 # 
 # Usage: 
 #   chmod +x setup-droplet.sh
@@ -24,10 +25,7 @@ if ! command -v docker &> /dev/null; then
     curl -fsSL https://get.docker.com -o get-docker.sh
     sh get-docker.sh
     rm get-docker.sh
-    
-    # Add current user to docker group
     usermod -aG docker $USER
-    
     echo "Docker installed successfully"
 else
     echo "Docker already installed"
@@ -64,13 +62,16 @@ if [ ! -f ".env" ]; then
 # TravelPath Backend - Environment Variables
 # =================================================================
 
+# Your domain (for HTTPS) - REQUIRED!
+# Example: api.yourdomain.com
+DOMAIN=YOUR_DOMAIN_HERE
+
 # Google Maps API Key (required)
 MAPS_API_KEY=your_google_maps_api_key_here
 
 # =================================================================
 # Cloudflare R2 Object Storage
 # =================================================================
-# Get these from Cloudflare Dashboard > R2 > Manage R2 API Tokens
 
 # R2 Endpoint (format: <account_id>.r2.cloudflarestorage.com)
 R2_ENDPOINT=your_account_id.r2.cloudflarestorage.com
@@ -88,8 +89,9 @@ R2_BUCKET_NAME=travel-photos
 # Server Configuration
 # =================================================================
 
-# Base URL - REPLACE with your droplet IP!
-BASE_URL=http://YOUR_DROPLET_IP:8000
+# Base URL - use HTTPS with your domain!
+# Example: https://api.yourdomain.com
+BASE_URL=https://YOUR_DOMAIN_HERE
 EOF
     
     echo ""
@@ -100,16 +102,11 @@ else
     echo ".env file already exists"
 fi
 
-# Remind about Firebase credentials
-echo ""
-echo "⚠️  Don't forget to copy your Firebase credentials!"
-echo "    scp serviceAccountKey.json root@YOUR_DROPLET_IP:~/travelpath-backend/"
-echo ""
-
 # Setup firewall
 echo "🔥 Configuring firewall..."
 ufw allow 22/tcp    # SSH
-ufw allow 8000/tcp  # HTTP API
+ufw allow 80/tcp    # HTTP (for Let's Encrypt challenge)
+ufw allow 443/tcp   # HTTPS
 ufw allow 50051/tcp # gRPC
 ufw --force enable
 
@@ -117,22 +114,25 @@ echo ""
 echo "✅ Setup complete!"
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
-echo "Next steps:"
+echo "ВАЖНО: Перед запуском сервера"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
-echo "1. Edit .env file with your values:"
+echo "1. Настрой DNS для твоего домена:"
+echo "   Добавь A-запись: api.yourdomain.com → $(curl -s ifconfig.me)"
+echo ""
+echo "2. Редактируй .env файл:"
 echo "   nano ~/travelpath-backend/.env"
 echo ""
-echo "2. Copy Firebase credentials from your local machine:"
+echo "3. Скопируй Firebase credentials:"
 echo "   scp serviceAccountKey.json root@$(curl -s ifconfig.me):~/travelpath-backend/"
 echo ""
-echo "3. Start the server:"
+echo "4. Запусти сервер:"
 echo "   cd ~/travelpath-backend && docker compose -f docker-compose.prod.yml up -d"
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
-echo "Your services will be available at:"
-echo "  - REST API: http://$(curl -s ifconfig.me):8000"
+echo "После запуска твои сервисы будут на:"
+echo "  - REST API: https://YOUR_DOMAIN (автоматический HTTPS!)"
 echo "  - gRPC:     $(curl -s ifconfig.me):50051"
-echo "  - Docs:     http://$(curl -s ifconfig.me):8000/docs"
+echo "  - Docs:     https://YOUR_DOMAIN/docs"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""

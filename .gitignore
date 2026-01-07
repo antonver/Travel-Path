@@ -71,3 +71,4 @@ htmlcov/
 *.bak
 *.tmp
 .cache/
+Travel-Path.env

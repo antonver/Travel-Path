@@ -1,0 +1,26 @@
+# =================================================================
+# Caddy Configuration for TravelPath Backend
+# =================================================================
+# Replace YOUR_DOMAIN.COM with your actual domain
+# Caddy automatically obtains and renews SSL certificates
+# =================================================================
+
+{$DOMAIN:localhost} {
+    # Reverse proxy to FastAPI backend
+    reverse_proxy backend:8000
+    
+    # Enable compression
+    encode gzip
+    
+    # Logging
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Health check endpoint (for monitoring)
+:80 {
+    respond /health "OK" 200
+}
+
