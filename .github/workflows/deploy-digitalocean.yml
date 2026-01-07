@@ -1,0 +1,46 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches:
+      - digitalocean
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to DigitalOcean Droplet
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USERNAME }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          port: 22
+          script: |
+            cd ~/travelpath-backend
+            
+            # Pull latest changes
+            git fetch origin digitalocean
+            git reset --hard origin/digitalocean
+            
+            # Stop existing containers
+            docker compose -f docker-compose.prod.yml down
+            
+            # Rebuild and start
+            docker compose -f docker-compose.prod.yml up -d --build
+            
+            # Wait for services to start
+            sleep 10
+            
+            # Show status
+            docker compose -f docker-compose.prod.yml ps
+            
+            # Health check
+            curl -f http://localhost:8000/health || echo "⚠️ Health check failed"
+            
+            echo "✅ Deployment complete!"
+
