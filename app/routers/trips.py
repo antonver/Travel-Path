@@ -259,7 +259,17 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
         
         # 2. Search places by theme (get 3x more than requested for better selection)
         step_time = time.time()
-        search_radius = 10000  # 10km radius
+        
+        # Adjust search radius based on transport mode
+        # Walking: smaller radius (3km), other modes: larger radius (10km)
+        if request.transport_mode == "walking":
+            search_radius = 3000  # 3km for walking - keep places close
+        elif request.transport_mode == "bicycling":
+            search_radius = 5000  # 5km for cycling
+        else:
+            search_radius = 10000  # 10km for driving/transit
+        
+        logger.info(f"Using search radius: {search_radius}m for transport mode: {request.transport_mode}")
         max_places_to_search = min(request.num_places * 3, 60)
         
         logger.info(f"⏱️ STEP 1: Searching {max_places_to_search} places...")
@@ -562,14 +572,16 @@ async def generate_routes(request: RouteGenerationRequest) -> RouteGenerationRes
         
         routes.sort(key=lambda r: parse_distance(r.walking_distance))
         
-        # Assign names based on difficulty (by walking distance)
+        # Assign names AND difficulty based on walking distance order
         difficulty_names = ["Facile", "Moyen", "Difficile"]
+        difficulty_values = ["easy", "moderate", "hard"]  # Sync with name
         difficulty_ids = ["route_facile", "route_moyen", "route_difficile"]
         
         for i, route in enumerate(routes):
             if i < len(difficulty_names):
                 route.name = difficulty_names[i]
                 route.id = difficulty_ids[i]
+                route.difficulty = difficulty_values[i]  # Sync difficulty with name
         
         elapsed_time = time.time() - start_time
         logger.info(
