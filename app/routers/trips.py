@@ -817,10 +817,18 @@ async def save_route(
         )
         logger.info(f"📦 SavedRoute object created")
         
+        # Log photos info for debugging
+        if request.route.places:
+            for i, place in enumerate(request.route.places):
+                photo_count = len(place.photos) if place.photos else 0
+                logger.info(f"📸 Place {i+1} ({place.name}): {photo_count} photos")
+        
         # Save to Firestore
         logger.info(f"💾 Saving to Firestore collection: saved_routes")
+        route_data = saved_route.model_dump()
+        logger.info(f"📊 Route data keys: {route_data.keys()}")
         firebase_service.db.collection("saved_routes").document(saved_route_id).set(
-            saved_route.model_dump()
+            route_data
         )
         
         logger.info(f"✅ Route saved successfully: {saved_route_id} for user {user_id}")
@@ -868,6 +876,11 @@ async def get_saved_routes(
             for doc in query.stream():
                 logger.info(f"📄 Processing document: {doc.id}")
                 route_data = doc.to_dict()
+                # Log photos info for debugging
+                if route_data.get("route") and route_data["route"].get("places"):
+                    for i, place in enumerate(route_data["route"]["places"]):
+                        photo_count = len(place.get("photos", []))
+                        logger.info(f"📸 Loaded place {i+1} ({place.get('name', 'unknown')}): {photo_count} photos")
                 saved_routes.append(SavedRoute(**route_data))
             
         except Exception as order_error:
@@ -881,6 +894,11 @@ async def get_saved_routes(
             for doc in query.stream():
                 logger.info(f"📄 Processing document: {doc.id}")
                 route_data = doc.to_dict()
+                # Log photos info for debugging
+                if route_data.get("route") and route_data["route"].get("places"):
+                    for i, place in enumerate(route_data["route"]["places"]):
+                        photo_count = len(place.get("photos", []))
+                        logger.info(f"📸 Loaded place {i+1} ({place.get('name', 'unknown')}): {photo_count} photos")
                 saved_routes.append(SavedRoute(**route_data))
             
             # Sort in Python instead
