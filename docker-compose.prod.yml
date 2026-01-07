@@ -1,27 +1,9 @@
 version: '3.8'
 
-services:
-  minio:
-    image: minio/minio
-    container_name: travel-minio
-    command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-    networks:
-      - travel-network
-    restart: unless-stopped
+# Production configuration for DigitalOcean Droplet
+# Uses Cloudflare R2 for object storage (no local MinIO needed)
 
+services:
   backend:
     build:
       context: .
@@ -36,25 +18,26 @@ services:
       PROJECT_NAME: TravelPath
       FIREBASE_CREDENTIALS_PATH: /app/serviceAccountKey.json
       MAPS_API_KEY: ${MAPS_API_KEY}
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      MINIO_BUCKET_NAME: travel-photos
-      MINIO_USE_SSL: "false"
+      
+      # Cloudflare R2 settings
+      MINIO_ENDPOINT: ${R2_ENDPOINT}
+      MINIO_ROOT_USER: ${R2_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${R2_SECRET_ACCESS_KEY}
+      MINIO_BUCKET_NAME: ${R2_BUCKET_NAME:-travel-photos}
+      MINIO_USE_SSL: "true"
+      MINIO_REGION: auto
+      
+      # Server settings
       BASE_URL: ${BASE_URL}
       GRPC_PORT: 50051
-    depends_on:
-      minio:
-        condition: service_healthy
-    networks:
-      - travel-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 networks:
-  travel-network:
+  default:
     driver: bridge
-
-volumes:
-  minio_data:
-    driver: local
-
