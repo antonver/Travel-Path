@@ -802,6 +802,20 @@ async def save_route(
         user_id = current_user["uid"]
         logger.info(f"💾 Saving route for user: {user_id}")
         
+        # Check if this route is already saved by this user
+        existing_routes = firebase_service.db.collection("saved_routes")\
+            .where("user_id", "==", user_id)\
+            .where("route.id", "==", request.route.id)\
+            .limit(1)\
+            .stream()
+        
+        for doc in existing_routes:
+            logger.info(f"⚠️ Route {request.route.id} already saved by user {user_id}")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ce parcours est déjà enregistré"
+            )
+        
         # Generate unique ID for saved route
         saved_route_id = str(uuid.uuid4())
         logger.info(f"🆔 Generated route ID: {saved_route_id}")
