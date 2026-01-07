@@ -4,14 +4,99 @@ package photo;
 
 // Service for receiving photos from partner application
 service PhotoService {
-    // Upload a photo with place information
-    rpc UploadPlacePhoto(PlacePhotoRequest) returns (PlacePhotoResponse);
+    // Upload a photo with all metadata
+    rpc UploadPhoto(PhotoRequest) returns (PhotoResponse);
     
     // Stream multiple photos
-    rpc UploadPlacePhotoBatch(stream PlacePhotoRequest) returns (BatchPhotoResponse);
+    rpc UploadPhotoBatch(stream PhotoRequest) returns (BatchPhotoResponse);
+    
+    // Legacy endpoint for backwards compatibility
+    rpc UploadPlacePhoto(PlacePhotoRequest) returns (PlacePhotoResponse);
+    
+    // Legacy batch endpoint
+    rpc UploadPlacePhotoBatch(stream PlacePhotoRequest) returns (LegacyBatchPhotoResponse);
 }
 
-// Photo upload request
+// GeoPoint message (matches Android Firestore GeoPoint)
+message GeoPoint {
+    double latitude = 1;
+    double longitude = 2;
+}
+
+// New Photo request format (matches Android data class Photo)
+message PhotoRequest {
+    // Photo ID (optional, will be generated if empty)
+    string photo_id = 1;
+    
+    // Media URIs (list of photo URLs/paths)
+    repeated string media_uris = 2;
+    
+    // Thumbnail URL
+    string thumbnail_url = 3;
+    
+    // Audio URL (optional)
+    string audio_url = 4;
+    
+    // Description
+    string description = 5;
+    
+    // AI-generated tags
+    repeated string ai_tags = 6;
+    
+    // Category (e.g., "Nature", "Urban")
+    string category = 7;
+    
+    // Location Data
+    string location_name = 8;
+    GeoPoint geo_point = 9;
+    string geohash = 10;
+    string continent = 11;
+    
+    // Author Data (Denormalized)
+    string author_id = 12;
+    string author_name = 13;
+    string author_avatar = 14;
+    
+    // Visibility & Social
+    string visibility = 15;  // "PUBLIC" or "GROUP"
+    string group_id = 16;    // Optional, only if visibility is GROUP
+    int32 like_count = 17;
+    
+    // Timestamp (milliseconds since epoch)
+    int64 timestamp = 18;
+    
+    // Binary photo data (optional, for direct upload)
+    bytes photo_data = 19;
+    
+    // Content type for photo_data (e.g., "image/jpeg")
+    string content_type = 20;
+    
+    // Source app identifier
+    string source_app = 21;
+}
+
+// New Photo response
+message PhotoResponse {
+    bool success = 1;
+    string photo_id = 2;
+    string error_message = 3;
+    
+    // URLs for uploaded media
+    repeated string media_urls = 4;
+    string thumbnail_url = 5;
+    string audio_url = 6;
+}
+
+// Batch upload response (new format)
+message BatchPhotoResponse {
+    int32 success_count = 1;
+    int32 failed_count = 2;
+    repeated PhotoResponse responses = 3;
+}
+
+// ========== Legacy messages for backwards compatibility ==========
+
+// Legacy Photo upload request
 message PlacePhotoRequest {
     // Photo data (binary)
     bytes photo_data = 1;
@@ -32,7 +117,7 @@ message PlacePhotoRequest {
     string source_user_id = 6;
 }
 
-// Place information
+// Legacy Place information
 message PlaceInfo {
     // Place name
     string name = 1;
@@ -57,7 +142,7 @@ message PlaceInfo {
     repeated string types = 8;
 }
 
-// Upload response
+// Legacy Upload response
 message PlacePhotoResponse {
     // Success status
     bool success = 1;
@@ -75,8 +160,8 @@ message PlacePhotoResponse {
     string matched_place_id = 5;
 }
 
-// Batch upload response
-message BatchPhotoResponse {
+// Legacy Batch upload response
+message LegacyBatchPhotoResponse {
     // Number of successfully uploaded photos
     int32 success_count = 1;
     
@@ -86,4 +171,3 @@ message BatchPhotoResponse {
     // Individual responses
     repeated PlacePhotoResponse responses = 3;
 }
-

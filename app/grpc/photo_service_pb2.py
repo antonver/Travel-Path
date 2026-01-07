@@ -24,21 +24,29 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13photo_service.proto\x12\x05photo\"\xa1\x01\n\x11PlacePhotoRequest\x12\x12\n\nphoto_data\x18\x01 \x01(\x0c\x12\x10\n\x08\x66ilename\x18\x02 \x01(\t\x12\x14\n\x0c\x63ontent_type\x18\x03 \x01(\t\x12$\n\nplace_info\x18\x04 \x01(\x0b\x32\x10.photo.PlaceInfo\x12\x12\n\nsource_app\x18\x05 \x01(\t\x12\x16\n\x0esource_user_id\x18\x06 \x01(\t\"\x96\x01\n\tPlaceInfo\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07\x61\x64\x64ress\x18\x02 \x01(\t\x12\x0c\n\x04\x63ity\x18\x03 \x01(\t\x12\x0f\n\x07\x63ountry\x18\x04 \x01(\t\x12\x10\n\x08latitude\x18\x05 \x01(\x01\x12\x11\n\tlongitude\x18\x06 \x01(\x01\x12\x17\n\x0fgoogle_place_id\x18\x07 \x01(\t\x12\r\n\x05types\x18\x08 \x03(\t\"{\n\x12PlacePhotoResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x11\n\tphoto_url\x18\x02 \x01(\t\x12\x10\n\x08photo_id\x18\x03 \x01(\t\x12\x15\n\rerror_message\x18\x04 \x01(\t\x12\x18\n\x10matched_place_id\x18\x05 \x01(\t\"o\n\x12\x42\x61tchPhotoResponse\x12\x15\n\rsuccess_count\x18\x01 \x01(\x05\x12\x14\n\x0c\x66\x61iled_count\x18\x02 \x01(\x05\x12,\n\tresponses\x18\x03 \x03(\x0b\x32\x19.photo.PlacePhotoResponse2\xa7\x01\n\x0cPhotoService\x12G\n\x10UploadPlacePhoto\x12\x18.photo.PlacePhotoRequest\x1a\x19.photo.PlacePhotoResponse\x12N\n\x15UploadPlacePhotoBatch\x12\x18.photo.PlacePhotoRequest\x1a\x19.photo.BatchPhotoResponse(\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13photo_service.proto\x12\x05photo\"/\n\x08GeoPoint\x12\x10\n\x08latitude\x18\x01 \x01(\x01\x12\x11\n\tlongitude\x18\x02 \x01(\x01\"\xbf\x03\n\x0cPhotoRequest\x12\x10\n\x08photo_id\x18\x01 \x01(\t\x12\x12\n\nmedia_uris\x18\x02 \x03(\t\x12\x15\n\rthumbnail_url\x18\x03 \x01(\t\x12\x11\n\taudio_url\x18\x04 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x05 \x01(\t\x12\x0f\n\x07\x61i_tags\x18\x06 \x03(\t\x12\x10\n\x08\x63\x61tegory\x18\x07 \x01(\t\x12\x15\n\rlocation_name\x18\x08 \x01(\t\x12\"\n\tgeo_point\x18\t \x01(\x0b\x32\x0f.photo.GeoPoint\x12\x0f\n\x07geohash\x18\n \x01(\t\x12\x11\n\tcontinent\x18\x0b \x01(\t\x12\x11\n\tauthor_id\x18\x0c \x01(\t\x12\x13\n\x0b\x61uthor_name\x18\r \x01(\t\x12\x15\n\rauthor_avatar\x18\x0e \x01(\t\x12\x12\n\nvisibility\x18\x0f \x01(\t\x12\x10\n\x08group_id\x18\x10 \x01(\t\x12\x12\n\nlike_count\x18\x11 \x01(\x05\x12\x11\n\ttimestamp\x18\x12 \x01(\x03\x12\x12\n\nphoto_data\x18\x13 \x01(\x0c\x12\x14\n\x0c\x63ontent_type\x18\x14 \x01(\t\x12\x12\n\nsource_app\x18\x15 \x01(\t\"\x87\x01\n\rPhotoResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x10\n\x08photo_id\x18\x02 \x01(\t\x12\x15\n\rerror_message\x18\x03 \x01(\t\x12\x12\n\nmedia_urls\x18\x04 \x03(\t\x12\x15\n\rthumbnail_url\x18\x05 \x01(\t\x12\x11\n\taudio_url\x18\x06 \x01(\t\"j\n\x12\x42\x61tchPhotoResponse\x12\x15\n\rsuccess_count\x18\x01 \x01(\x05\x12\x14\n\x0c\x66\x61iled_count\x18\x02 \x01(\x05\x12\'\n\tresponses\x18\x03 \x03(\x0b\x32\x14.photo.PhotoResponse\"\xa1\x01\n\x11PlacePhotoRequest\x12\x12\n\nphoto_data\x18\x01 \x01(\x0c\x12\x10\n\x08\x66ilename\x18\x02 \x01(\t\x12\x14\n\x0c\x63ontent_type\x18\x03 \x01(\t\x12$\n\nplace_info\x18\x04 \x01(\x0b\x32\x10.photo.PlaceInfo\x12\x12\n\nsource_app\x18\x05 \x01(\t\x12\x16\n\x0esource_user_id\x18\x06 \x01(\t\"\x96\x01\n\tPlaceInfo\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07\x61\x64\x64ress\x18\x02 \x01(\t\x12\x0c\n\x04\x63ity\x18\x03 \x01(\t\x12\x0f\n\x07\x63ountry\x18\x04 \x01(\t\x12\x10\n\x08latitude\x18\x05 \x01(\x01\x12\x11\n\tlongitude\x18\x06 \x01(\x01\x12\x17\n\x0fgoogle_place_id\x18\x07 \x01(\t\x12\r\n\x05types\x18\x08 \x03(\t\"{\n\x12PlacePhotoResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x11\n\tphoto_url\x18\x02 \x01(\t\x12\x10\n\x08photo_id\x18\x03 \x01(\t\x12\x15\n\rerror_message\x18\x04 \x01(\t\x12\x18\n\x10matched_place_id\x18\x05 \x01(\t\"u\n\x18LegacyBatchPhotoResponse\x12\x15\n\rsuccess_count\x18\x01 \x01(\x05\x12\x14\n\x0c\x66\x61iled_count\x18\x02 \x01(\x05\x12,\n\tresponses\x18\x03 \x03(\x0b\x32\x19.photo.PlacePhotoResponse2\xad\x02\n\x0cPhotoService\x12\x38\n\x0bUploadPhoto\x12\x13.photo.PhotoRequest\x1a\x14.photo.PhotoResponse\x12\x44\n\x10UploadPhotoBatch\x12\x13.photo.PhotoRequest\x1a\x19.photo.BatchPhotoResponse(\x01\x12G\n\x10UploadPlacePhoto\x12\x18.photo.PlacePhotoRequest\x1a\x19.photo.PlacePhotoResponse\x12T\n\x15UploadPlacePhotoBatch\x12\x18.photo.PlacePhotoRequest\x1a\x1f.photo.LegacyBatchPhotoResponse(\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'photo_service_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_PLACEPHOTOREQUEST']._serialized_start=31
-  _globals['_PLACEPHOTOREQUEST']._serialized_end=192
-  _globals['_PLACEINFO']._serialized_start=195
-  _globals['_PLACEINFO']._serialized_end=345
-  _globals['_PLACEPHOTORESPONSE']._serialized_start=347
-  _globals['_PLACEPHOTORESPONSE']._serialized_end=470
-  _globals['_BATCHPHOTORESPONSE']._serialized_start=472
-  _globals['_BATCHPHOTORESPONSE']._serialized_end=583
-  _globals['_PHOTOSERVICE']._serialized_start=586
-  _globals['_PHOTOSERVICE']._serialized_end=753
+  _globals['_GEOPOINT']._serialized_start=30
+  _globals['_GEOPOINT']._serialized_end=77
+  _globals['_PHOTOREQUEST']._serialized_start=80
+  _globals['_PHOTOREQUEST']._serialized_end=527
+  _globals['_PHOTORESPONSE']._serialized_start=530
+  _globals['_PHOTORESPONSE']._serialized_end=665
+  _globals['_BATCHPHOTORESPONSE']._serialized_start=667
+  _globals['_BATCHPHOTORESPONSE']._serialized_end=773
+  _globals['_PLACEPHOTOREQUEST']._serialized_start=776
+  _globals['_PLACEPHOTOREQUEST']._serialized_end=937
+  _globals['_PLACEINFO']._serialized_start=940
+  _globals['_PLACEINFO']._serialized_end=1090
+  _globals['_PLACEPHOTORESPONSE']._serialized_start=1092
+  _globals['_PLACEPHOTORESPONSE']._serialized_end=1215
+  _globals['_LEGACYBATCHPHOTORESPONSE']._serialized_start=1217
+  _globals['_LEGACYBATCHPHOTORESPONSE']._serialized_end=1334
+  _globals['_PHOTOSERVICE']._serialized_start=1337
+  _globals['_PHOTOSERVICE']._serialized_end=1638
 # @@protoc_insertion_point(module_scope)

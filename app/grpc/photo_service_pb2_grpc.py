@@ -35,6 +35,16 @@ class PhotoServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
+        self.UploadPhoto = channel.unary_unary(
+                '/photo.PhotoService/UploadPhoto',
+                request_serializer=photo__service__pb2.PhotoRequest.SerializeToString,
+                response_deserializer=photo__service__pb2.PhotoResponse.FromString,
+                _registered_method=True)
+        self.UploadPhotoBatch = channel.stream_unary(
+                '/photo.PhotoService/UploadPhotoBatch',
+                request_serializer=photo__service__pb2.PhotoRequest.SerializeToString,
+                response_deserializer=photo__service__pb2.BatchPhotoResponse.FromString,
+                _registered_method=True)
         self.UploadPlacePhoto = channel.unary_unary(
                 '/photo.PhotoService/UploadPlacePhoto',
                 request_serializer=photo__service__pb2.PlacePhotoRequest.SerializeToString,
@@ -43,7 +53,7 @@ class PhotoServiceStub(object):
         self.UploadPlacePhotoBatch = channel.stream_unary(
                 '/photo.PhotoService/UploadPlacePhotoBatch',
                 request_serializer=photo__service__pb2.PlacePhotoRequest.SerializeToString,
-                response_deserializer=photo__service__pb2.BatchPhotoResponse.FromString,
+                response_deserializer=photo__service__pb2.LegacyBatchPhotoResponse.FromString,
                 _registered_method=True)
 
 
@@ -51,15 +61,29 @@ class PhotoServiceServicer(object):
     """Service for receiving photos from partner application
     """
 
+    def UploadPhoto(self, request, context):
+        """Upload a photo with all metadata
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UploadPhotoBatch(self, request_iterator, context):
+        """Stream multiple photos
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def UploadPlacePhoto(self, request, context):
-        """Upload a photo with place information
+        """Legacy endpoint for backwards compatibility
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UploadPlacePhotoBatch(self, request_iterator, context):
-        """Stream multiple photos
+        """Legacy batch endpoint
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -68,6 +92,16 @@ class PhotoServiceServicer(object):
 
 def add_PhotoServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'UploadPhoto': grpc.unary_unary_rpc_method_handler(
+                    servicer.UploadPhoto,
+                    request_deserializer=photo__service__pb2.PhotoRequest.FromString,
+                    response_serializer=photo__service__pb2.PhotoResponse.SerializeToString,
+            ),
+            'UploadPhotoBatch': grpc.stream_unary_rpc_method_handler(
+                    servicer.UploadPhotoBatch,
+                    request_deserializer=photo__service__pb2.PhotoRequest.FromString,
+                    response_serializer=photo__service__pb2.BatchPhotoResponse.SerializeToString,
+            ),
             'UploadPlacePhoto': grpc.unary_unary_rpc_method_handler(
                     servicer.UploadPlacePhoto,
                     request_deserializer=photo__service__pb2.PlacePhotoRequest.FromString,
@@ -76,7 +110,7 @@ def add_PhotoServiceServicer_to_server(servicer, server):
             'UploadPlacePhotoBatch': grpc.stream_unary_rpc_method_handler(
                     servicer.UploadPlacePhotoBatch,
                     request_deserializer=photo__service__pb2.PlacePhotoRequest.FromString,
-                    response_serializer=photo__service__pb2.BatchPhotoResponse.SerializeToString,
+                    response_serializer=photo__service__pb2.LegacyBatchPhotoResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -89,6 +123,60 @@ def add_PhotoServiceServicer_to_server(servicer, server):
 class PhotoService(object):
     """Service for receiving photos from partner application
     """
+
+    @staticmethod
+    def UploadPhoto(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/photo.PhotoService/UploadPhoto',
+            photo__service__pb2.PhotoRequest.SerializeToString,
+            photo__service__pb2.PhotoResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UploadPhotoBatch(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_unary(
+            request_iterator,
+            target,
+            '/photo.PhotoService/UploadPhotoBatch',
+            photo__service__pb2.PhotoRequest.SerializeToString,
+            photo__service__pb2.BatchPhotoResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def UploadPlacePhoto(request,
@@ -133,7 +221,7 @@ class PhotoService(object):
             target,
             '/photo.PhotoService/UploadPlacePhotoBatch',
             photo__service__pb2.PlacePhotoRequest.SerializeToString,
-            photo__service__pb2.BatchPhotoResponse.FromString,
+            photo__service__pb2.LegacyBatchPhotoResponse.FromString,
             options,
             channel_credentials,
             insecure,

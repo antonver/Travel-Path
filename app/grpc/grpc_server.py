@@ -11,7 +11,7 @@ from typing import Optional
 
 from app.grpc import photo_service_pb2
 from app.grpc import photo_service_pb2_grpc
-from app.grpc.photo_grpc_service import place_photo_service
+from app.grpc.photo_grpc_service import photo_service
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +22,117 @@ GRPC_PORT = 50051
 class PhotoServiceServicer(photo_service_pb2_grpc.PhotoServiceServicer):
     """
     Implementation of PhotoService gRPC service.
+    Supports both new Photo format and legacy PlacePhoto format.
     """
     
     def __init__(self):
-        self.photo_service = place_photo_service
+        self.photo_service = photo_service
+    
+    def UploadPhoto(self, request, context):
+        """
+        Handle photo upload with new Photo format (matches Android data class).
+        """
+        try:
+            logger.info(f"📸 gRPC: Receiving photo from author: {request.author_name}, location: {request.location_name}")
+            
+            # Extract GeoPoint if provided
+            latitude = None
+            longitude = None
+            if request.HasField("geo_point"):
+                latitude = request.geo_point.latitude
+                longitude = request.geo_point.longitude
+            
+            # Extract timestamp (convert from milliseconds to seconds if needed)
+            timestamp = request.timestamp if request.timestamp else None
+            
+            # Use asyncio to run async upload
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                result = loop.run_until_complete(
+                    self.photo_service.upload_photo(
+                        photo_id=request.photo_id or "",
+                        media_uris=list(request.media_uris) if request.media_uris else [],
+                        thumbnail_url=request.thumbnail_url or "",
+                        audio_url=request.audio_url or "",
+                        description=request.description or "",
+                        ai_tags=list(request.ai_tags) if request.ai_tags else [],
+                        category=request.category or "",
+                        location_name=request.location_name or "",
+                        latitude=latitude,
+                        longitude=longitude,
+                        geohash=request.geohash or "",
+                        continent=request.continent or "",
+                        author_id=request.author_id or "",
+                        author_name=request.author_name or "",
+                        author_avatar=request.author_avatar or "",
+                        visibility=request.visibility or "PUBLIC",
+                        group_id=request.group_id or "",
+                        like_count=request.like_count,
+                        timestamp=timestamp,
+                        photo_data=request.photo_data if request.photo_data else None,
+                        content_type=request.content_type or "image/jpeg",
+                        source_app=request.source_app or "android_app"
+                    )
+                )
+            finally:
+                loop.close()
+            
+            # Build response
+            response = photo_service_pb2.PhotoResponse(
+                success=result.get("success", False),
+                photo_id=result.get("photo_id", ""),
+                error_message=result.get("error_message", "") or "",
+                media_urls=result.get("media_urls", []),
+                thumbnail_url=result.get("thumbnail_url", "") or "",
+                audio_url=result.get("audio_url", "") or ""
+            )
+            
+            if result.get("success"):
+                logger.info(f"✅ gRPC: Photo uploaded successfully: {result.get('photo_id')}")
+            else:
+                logger.error(f"❌ gRPC: Photo upload failed: {result.get('error_message')}")
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"❌ gRPC Error: {str(e)}")
+            return photo_service_pb2.PhotoResponse(
+                success=False,
+                error_message=str(e)
+            )
+    
+    def UploadPhotoBatch(self, request_iterator, context):
+        """
+        Handle batch photo upload (streaming) with new format.
+        """
+        success_count = 0
+        failed_count = 0
+        responses = []
+        
+        for request in request_iterator:
+            response = self.UploadPhoto(request, context)
+            responses.append(response)
+            
+            if response.success:
+                success_count += 1
+            else:
+                failed_count += 1
+        
+        logger.info(f"📦 gRPC Batch: {success_count} success, {failed_count} failed")
+        
+        return photo_service_pb2.BatchPhotoResponse(
+            success_count=success_count,
+            failed_count=failed_count,
+            responses=responses
+        )
+    
+    # ========== Legacy methods for backwards compatibility ==========
     
     def UploadPlacePhoto(self, request, context):
         """
-        Handle single photo upload from partner application.
+        Legacy: Handle single photo upload from partner application.
         """
         try:
             logger.info(f"📸 gRPC: Receiving photo for place: {request.place_info.name}")
@@ -100,7 +203,7 @@ class PhotoServiceServicer(photo_service_pb2_grpc.PhotoServiceServicer):
     
     def UploadPlacePhotoBatch(self, request_iterator, context):
         """
-        Handle batch photo upload (streaming).
+        Legacy: Handle batch photo upload (streaming).
         """
         success_count = 0
         failed_count = 0
@@ -117,7 +220,7 @@ class PhotoServiceServicer(photo_service_pb2_grpc.PhotoServiceServicer):
         
         logger.info(f"📦 gRPC Batch: {success_count} success, {failed_count} failed")
         
-        return photo_service_pb2.BatchPhotoResponse(
+        return photo_service_pb2.LegacyBatchPhotoResponse(
             success_count=success_count,
             failed_count=failed_count,
             responses=responses

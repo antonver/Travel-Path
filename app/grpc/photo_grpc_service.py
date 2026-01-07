@@ -7,7 +7,8 @@ import logging
 import uuid
 import io
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
+import pygeohash as pgh
 
 # These will be generated from proto file
 # For now we'll use a REST-based fallback
@@ -19,17 +20,248 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-class PlacePhotoService:
+def get_continent_from_coords(lat: float, lng: float) -> str:
+    """
+    Determine continent from coordinates (simple approximation).
+    """
+    # Simple continent detection based on coordinates
+    if lat > 35 and lng > -30 and lng < 60:
+        return "Europe"
+    elif lat > 10 and lng > 60 and lng < 150:
+        return "Asia"
+    elif lat < 10 and lat > -40 and lng > 100 and lng < 180:
+        return "Oceania"
+    elif lat > -60 and lat < 15 and lng > -80 and lng < -30:
+        return "South America"
+    elif lat > 15 and lng > -170 and lng < -50:
+        return "North America"
+    elif lat > -40 and lat < 40 and lng > -20 and lng < 55:
+        return "Africa"
+    elif lat < -60:
+        return "Antarctica"
+    else:
+        return "Unknown"
+
+
+class PhotoService:
     """
     Service for handling photo uploads from partner applications.
-    This can work both as gRPC service and as a regular Python service.
+    Supports both new Photo format and legacy PlacePhoto format.
     """
     
     def __init__(self):
         self.minio = minio_service
         self.firebase = firebase_service
         self.maps = maps_service
+    
+    async def upload_photo(
+        self,
+        photo_id: str = "",
+        media_uris: List[str] = None,
+        thumbnail_url: str = "",
+        audio_url: str = "",
+        description: str = "",
+        ai_tags: List[str] = None,
+        category: str = "",
+        location_name: str = "",
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
+        geohash: str = "",
+        continent: str = "",
+        author_id: str = "",
+        author_name: str = "",
+        author_avatar: str = "",
+        visibility: str = "PUBLIC",
+        group_id: str = "",
+        like_count: int = 0,
+        timestamp: Optional[int] = None,
+        photo_data: Optional[bytes] = None,
+        content_type: str = "image/jpeg",
+        source_app: str = "partner_app"
+    ) -> dict:
+        """
+        Upload a photo with all metadata in new format.
         
+        Returns:
+            dict with photo_id, media_urls, thumbnail_url, audio_url, success status
+        """
+        try:
+            media_uris = media_uris or []
+            ai_tags = ai_tags or []
+            
+            logger.info(f"📸 Receiving photo: {location_name}, author: {author_name}")
+            
+            # Generate photo ID if not provided
+            if not photo_id:
+                photo_id = str(uuid.uuid4())
+            
+            now = datetime.utcnow()
+            timestamp_str = now.strftime("%Y%m%d_%H%M%S")
+            
+            # Calculate geohash if not provided but coordinates are
+            if not geohash and latitude is not None and longitude is not None:
+                try:
+                    geohash = pgh.encode(latitude, longitude, precision=8)
+                except:
+                    geohash = ""
+            
+            # Determine continent if not provided
+            if not continent and latitude is not None and longitude is not None:
+                continent = get_continent_from_coords(latitude, longitude)
+            
+            uploaded_media_urls = []
+            uploaded_thumbnail_url = thumbnail_url
+            uploaded_audio_url = audio_url
+            
+            # Upload photo_data to MinIO if provided
+            if photo_data:
+                ext = "jpg"
+                if content_type == "image/png":
+                    ext = "png"
+                elif content_type == "image/webp":
+                    ext = "webp"
+                
+                # Create object path
+                if author_id:
+                    object_path = f"photos/{author_id}/{timestamp_str}_{photo_id}.{ext}"
+                else:
+                    object_path = f"photos/anonymous/{timestamp_str}_{photo_id}.{ext}"
+                
+                # Upload to MinIO
+                photo_url = self._upload_to_minio(
+                    photo_data=photo_data,
+                    object_path=object_path,
+                    content_type=content_type,
+                    metadata={
+                        "photo_id": photo_id,
+                        "author_id": author_id or "",
+                        "location_name": location_name,
+                        "category": category,
+                        "visibility": visibility,
+                        "source_app": source_app,
+                        "uploaded_at": now.isoformat()
+                    }
+                )
+                uploaded_media_urls.append(photo_url)
+                
+                # Also set as thumbnail if not provided
+                if not uploaded_thumbnail_url:
+                    uploaded_thumbnail_url = photo_url
+            else:
+                # Use provided media_uris
+                uploaded_media_urls = media_uris
+            
+            # Save metadata to Firestore in new Photo format
+            self._save_photo_to_firestore(
+                photo_id=photo_id,
+                media_uris=uploaded_media_urls,
+                thumbnail_url=uploaded_thumbnail_url,
+                audio_url=uploaded_audio_url,
+                description=description,
+                ai_tags=ai_tags,
+                category=category,
+                location_name=location_name,
+                latitude=latitude,
+                longitude=longitude,
+                geohash=geohash,
+                continent=continent,
+                author_id=author_id,
+                author_name=author_name,
+                author_avatar=author_avatar,
+                visibility=visibility,
+                group_id=group_id,
+                like_count=like_count,
+                source_app=source_app
+            )
+            
+            logger.info(f"✅ Photo uploaded successfully: {photo_id}")
+            
+            return {
+                "success": True,
+                "photo_id": photo_id,
+                "media_urls": uploaded_media_urls,
+                "thumbnail_url": uploaded_thumbnail_url,
+                "audio_url": uploaded_audio_url,
+                "error_message": None
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error uploading photo: {str(e)}")
+            return {
+                "success": False,
+                "photo_id": photo_id or "",
+                "media_urls": [],
+                "thumbnail_url": "",
+                "audio_url": "",
+                "error_message": str(e)
+            }
+    
+    def _save_photo_to_firestore(
+        self,
+        photo_id: str,
+        media_uris: List[str],
+        thumbnail_url: str,
+        audio_url: str,
+        description: str,
+        ai_tags: List[str],
+        category: str,
+        location_name: str,
+        latitude: Optional[float],
+        longitude: Optional[float],
+        geohash: str,
+        continent: str,
+        author_id: str,
+        author_name: str,
+        author_avatar: str,
+        visibility: str,
+        group_id: str,
+        like_count: int,
+        source_app: str
+    ) -> None:
+        """
+        Save photo metadata to Firestore in the new Photo format.
+        """
+        try:
+            from google.cloud.firestore import GeoPoint
+            
+            # Build GeoPoint if coordinates provided
+            geo_point = None
+            if latitude is not None and longitude is not None:
+                geo_point = GeoPoint(latitude, longitude)
+            
+            doc_data = {
+                "photoId": photo_id,
+                "mediaUris": media_uris,
+                "thumbnailUrl": thumbnail_url,
+                "audioUrl": audio_url if audio_url else None,
+                "description": description,
+                "aiTags": ai_tags,
+                "category": category,
+                "locationName": location_name,
+                "geoPoint": geo_point,
+                "geohash": geohash,
+                "continent": continent,
+                "authorId": author_id,
+                "authorName": author_name,
+                "authorAvatar": author_avatar,
+                "visibility": visibility,
+                "groupId": group_id if group_id else None,
+                "likeCount": like_count,
+                "timestamp": datetime.utcnow(),
+                "sourceApp": source_app
+            }
+            
+            # Save to 'photos' collection (matching Android app)
+            self.firebase.db.collection("photos").document(photo_id).set(doc_data)
+            
+            logger.info(f"Photo metadata saved to Firestore: {photo_id}")
+            
+        except Exception as e:
+            logger.error(f"Firestore save error: {str(e)}")
+            # Don't raise - photo might already be in MinIO
+    
+    # ========== Legacy methods for backwards compatibility ==========
+    
     async def upload_place_photo(
         self,
         photo_data: bytes,
@@ -46,7 +278,7 @@ class PlacePhotoService:
         place_types: Optional[list] = None
     ) -> dict:
         """
-        Upload a photo and associate it with a place.
+        Legacy: Upload a photo and associate it with a place.
         
         If google_place_id is not provided, tries to find matching place by coordinates/name.
         
@@ -103,8 +335,8 @@ class PlacePhotoService:
                 }
             )
             
-            # Save metadata to Firestore
-            self._save_photo_metadata_to_firestore(
+            # Save metadata to Firestore (legacy format)
+            self._save_place_photo_metadata_to_firestore(
                 photo_id=photo_id,
                 photo_url=photo_url,
                 place_id=matched_place_id,
@@ -218,7 +450,7 @@ class PlacePhotoService:
             logger.error(f"MinIO upload error: {str(e)}")
             raise
     
-    def _save_photo_metadata_to_firestore(
+    def _save_place_photo_metadata_to_firestore(
         self,
         photo_id: str,
         photo_url: str,
@@ -233,7 +465,7 @@ class PlacePhotoService:
         place_types: list
     ) -> None:
         """
-        Save photo metadata to Firestore for quick lookup.
+        Legacy: Save photo metadata to Firestore for quick lookup.
         """
         try:
             doc_data = {
@@ -358,6 +590,8 @@ class PlacePhotoService:
             return []
 
 
-# Global instance
-place_photo_service = PlacePhotoService()
+# Global instance (new name)
+photo_service = PhotoService()
 
+# Legacy alias for backwards compatibility
+place_photo_service = photo_service
