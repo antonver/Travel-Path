@@ -1,14 +1,13 @@
 // =================================================================
 // TravelPath Photo Service - gRPC Protocol Definition
 // =================================================================
-// Server: travelpath-backend:50051 (or your-server-ip:50051)
 // 
-// This service allows Android app and partner applications to upload
-// photos that will be displayed in TravelPath.
+// Server endpoints:
+//   REST API: https://travelpath.cocktails.rocks
+//   gRPC:     travelpath.cocktails.rocks:50051
 // 
-// Two formats are supported:
-// 1. NEW: PhotoRequest - matches Android data class Photo
-// 2. LEGACY: PlacePhotoRequest - for backwards compatibility
+// This service allows partner applications to upload photos
+// that will be displayed in TravelPath.
 // =================================================================
 
 syntax = "proto3";
@@ -17,28 +16,17 @@ package photo;
 
 option java_package = "com.travelpath.grpc";
 option java_outer_classname = "PhotoServiceProto";
-option objc_class_prefix = "TPS";
 
 // =================================================================
-// PhotoService - Main service for photo uploads
+// PhotoService
 // =================================================================
 service PhotoService {
-    // NEW: Upload a photo with all metadata (matches Android Photo data class)
+    // Upload a photo with all metadata (matches Android Photo data class)
     rpc UploadPhoto(PhotoRequest) returns (PhotoResponse);
     
-    // NEW: Upload multiple photos in a stream (batch upload)
+    // Upload multiple photos in a stream
     rpc UploadPhotoBatch(stream PhotoRequest) returns (BatchPhotoResponse);
-    
-    // LEGACY: Upload a single photo with place information
-    rpc UploadPlacePhoto(PlacePhotoRequest) returns (PlacePhotoResponse);
-    
-    // LEGACY: Upload multiple photos in a stream (batch upload)
-    rpc UploadPlacePhotoBatch(stream PlacePhotoRequest) returns (LegacyBatchPhotoResponse);
 }
-
-// =================================================================
-// NEW FORMAT - Matches Android data class Photo
-// =================================================================
 
 // GeoPoint (matches Android Firestore GeoPoint)
 message GeoPoint {
@@ -46,71 +34,51 @@ message GeoPoint {
     double longitude = 2;
 }
 
-// NEW Photo request format (matches Android data class Photo)
+// Photo request format (matches Android data class Photo)
 message PhotoRequest {
-    // Photo ID (optional, will be generated if empty)
-    string photo_id = 1;
-    
-    // Media URIs (list of photo URLs/paths)
-    repeated string media_uris = 2;
-    
-    // Thumbnail URL
+    string photo_id = 1;              // Optional, auto-generated if empty
+    repeated string media_uris = 2;   // List of photo URLs
     string thumbnail_url = 3;
-    
-    // Audio URL (optional)
-    string audio_url = 4;
-    
-    // Description text
+    string audio_url = 4;             // Optional
     string description = 5;
-    
-    // AI-generated tags
     repeated string ai_tags = 6;
+    string category = 7;              // "Nature", "Urban", etc.
     
-    // Category (e.g., "Nature", "Urban")
-    string category = 7;
-    
-    // Location Data
+    // Location
     string location_name = 8;
     GeoPoint geo_point = 9;
-    string geohash = 10;
-    string continent = 11;  // Auto-determined if not provided
+    string geohash = 10;              // Auto-calculated if not provided
+    string continent = 11;            // Auto-determined if not provided
     
-    // Author Data (Denormalized)
+    // Author
     string author_id = 12;
     string author_name = 13;
     string author_avatar = 14;
     
-    // Visibility & Social
-    string visibility = 15;  // "PUBLIC" or "GROUP"
-    string group_id = 16;    // Optional, only if visibility is GROUP
+    // Visibility
+    string visibility = 15;           // "PUBLIC" or "GROUP"
+    string group_id = 16;             // Only if visibility is GROUP
     int32 like_count = 17;
     
-    // Timestamp (milliseconds since epoch)
-    int64 timestamp = 18;
+    int64 timestamp = 18;             // Milliseconds since epoch
     
     // Binary photo data (for direct upload)
     bytes photo_data = 19;
-    
-    // Content type for photo_data (e.g., "image/jpeg")
-    string content_type = 20;
-    
-    // Source app identifier
-    string source_app = 21;
+    string content_type = 20;         // "image/jpeg", "image/png"
+    string source_app = 21;           // Your app identifier
 }
 
-// NEW Photo response
+// Response
 message PhotoResponse {
     bool success = 1;
     string photo_id = 2;
     string error_message = 3;
-    
-    // URLs for uploaded media
     repeated string media_urls = 4;
     string thumbnail_url = 5;
     string audio_url = 6;
 }
 
-// NEW Batch upload response
+// Batch response
 message BatchPhotoResponse {
     int32 success_count = 1;
     int32 failed_count = 2;
@@ -118,66 +86,14 @@ message BatchPhotoResponse {
 }
 
 // =================================================================
-// LEGACY FORMAT - For backwards compatibility
-// =================================================================
-
-// Legacy request to upload a photo
-message PlacePhotoRequest {
-    // Photo binary data (JPEG, PNG, WebP supported)
-    // Max size: 50MB
-    bytes photo_data = 1;
-    
-    // Original filename (e.g., "IMG_2024.jpg")
-    string filename = 2;
-    
-    // MIME type: "image/jpeg", "image/png", "image/webp"
-    string content_type = 3;
-    
-    // Information about the place where photo was taken
-    PlaceInfo place_info = 4;
-    
-    // Your application identifier (e.g., "instagram_clone", "photo_share_app")
-    string source_app = 5;
-    
-    // User ID from your application (for tracking/attribution)
-    string source_user_id = 6;
-}
-
-// Legacy place information
-message PlaceInfo {
-    string name = 1;
-    string address = 2;
-    string city = 3;
-    string country = 4;
-    double latitude = 5;
-    double longitude = 6;
-    string google_place_id = 7;
-    repeated string types = 8;
-}
-
-// Legacy response for single photo upload
-message PlacePhotoResponse {
-    bool success = 1;
-    string photo_url = 2;
-    string photo_id = 3;
-    string error_message = 4;
-    string matched_place_id = 5;
-}
-
-// Legacy response for batch upload
-message LegacyBatchPhotoResponse {
-    int32 success_count = 1;
-    int32 failed_count = 2;
-    repeated PlacePhotoResponse responses = 3;
-}
-
-// =================================================================
-// Example Usage - NEW FORMAT (Android/Kotlin)
+// Example Usage (Kotlin/Android)
 // =================================================================
 // 
-// val channel = ManagedChannelBuilder.forAddress("server", 50051)
-//     .usePlaintext()
+// val channel = ManagedChannelBuilder
+//     .forAddress("travelpath.cocktails.rocks", 50051)
+//     .usePlaintext()  // gRPC без TLS на порту 50051
 //     .build()
+// 
 // val stub = PhotoServiceGrpc.newBlockingStub(channel)
 // 
 // val geoPoint = GeoPoint.newBuilder()
@@ -186,11 +102,7 @@ message LegacyBatchPhotoResponse {
 //     .build()
 // 
 // val request = PhotoRequest.newBuilder()
-//     .setPhotoId(UUID.randomUUID().toString())
-//     .addMediaUris("file:///path/to/photo.jpg")
 //     .setDescription("Beautiful sunset in Paris")
-//     .addAiTags("sunset")
-//     .addAiTags("paris")
 //     .setCategory("Nature")
 //     .setLocationName("Eiffel Tower")
 //     .setGeoPoint(geoPoint)
@@ -199,11 +111,10 @@ message LegacyBatchPhotoResponse {
 //     .setVisibility("PUBLIC")
 //     .setPhotoData(ByteString.copyFrom(photoBytes))
 //     .setContentType("image/jpeg")
-//     .setSourceApp("android_app")
+//     .setSourceApp("partner_app")
 //     .build()
 // 
 // val response = stub.uploadPhoto(request)
-// println("Success: ${response.success}")
-// println("Photo ID: ${response.photoId}")
+// println("Success: ${response.success}, Photo ID: ${response.photoId}")
 // 
 // =================================================================
