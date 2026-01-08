@@ -54,10 +54,26 @@ async def lifespan(app: FastAPI):
     logger.info(f"{settings.PROJECT_NAME} is ready!")
     logger.info("=" * 60)
     
+    # Start gRPC server for partner app photo uploads
+    stop_grpc = None
+    try:
+        from app.grpc.grpc_server import start_grpc_server, stop_grpc_server
+        start_grpc_server()
+        stop_grpc = stop_grpc_server
+        logger.info(f"✅ gRPC PhotoService started on port 50051")
+    except Exception as e:
+        logger.warning(f"⚠️ Could not start gRPC server: {e}")
+        logger.info("📝 REST API /photos/upload still available")
+    
     yield
     
     # Shutdown
     logger.info(f"Shutting down {settings.PROJECT_NAME}")
+    if stop_grpc:
+        try:
+            stop_grpc()
+        except:
+            pass
 
 
 # Create FastAPI application
@@ -166,23 +182,6 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Startup event logging
-@app.on_event("startup")
-async def startup_event():
-    """Additional startup logging"""
-    logger.info(f"FastAPI application started")
-    logger.info(f"Documentation available at: http://localhost:8000/docs")
-    
-    # Start gRPC server for partner app photo uploads
-    try:
-        from app.grpc.grpc_server import start_grpc_server
-        start_grpc_server()
-        logger.info(f"✅ gRPC PhotoService started on port 50051")
-    except Exception as e:
-        logger.warning(f"⚠️ Could not start gRPC server: {e}")
-        logger.info("📝 REST API /photos/upload still available")
-
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
@@ -192,4 +191,3 @@ if __name__ == "__main__":
         reload=True,
         log_level="info"
     )
-

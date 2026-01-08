@@ -1,11 +1,10 @@
 # =================================================================
 # Caddy Configuration for TravelPath Backend
 # =================================================================
-# Replace YOUR_DOMAIN.COM with your actual domain
-# Caddy automatically obtains and renews SSL certificates
+# Automatic HTTPS via Let's Encrypt
 # =================================================================
 
-{$DOMAIN:localhost} {
+travelpath.cocktails.rocks {
     # Reverse proxy to FastAPI backend
     reverse_proxy backend:8000
     
@@ -18,10 +17,3 @@
         format console
     }
 }
-
-# Health check endpoint (for monitoring)
-:80 {
-    respond /health "OK" 200
-}
-
-
