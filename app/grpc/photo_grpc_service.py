@@ -224,6 +224,16 @@ class PhotoService:
         try:
             from google.cloud.firestore import GeoPoint
             
+            # If no coordinates but geohash exists, decode geohash to get coordinates
+            if (latitude is None or longitude is None) and geohash:
+                try:
+                    decoded = pgh.decode(geohash)
+                    latitude = decoded[0]
+                    longitude = decoded[1]
+                    logger.info(f"Decoded geohash {geohash} to lat={latitude}, lng={longitude}")
+                except Exception as e:
+                    logger.warning(f"Failed to decode geohash {geohash}: {e}")
+            
             # Build GeoPoint if coordinates provided
             geo_point = None
             if latitude is not None and longitude is not None:
@@ -499,6 +509,7 @@ class PhotoService:
         """
         Convert direct MinIO URL to proxy URL for Android compatibility.
         localhost:9000 is not accessible from Android emulator.
+        External URLs (Firebase, Google, etc.) are returned as-is.
         """
         if not url:
             return url
@@ -506,6 +517,19 @@ class PhotoService:
         # If already a proxy URL, return as is
         if "/photos/minio-proxy" in url:
             return url
+        
+        # Don't proxy external URLs (Firebase Storage, Google, etc.)
+        external_domains = [
+            'firebasestorage.googleapis.com',
+            'storage.googleapis.com',
+            'lh3.googleusercontent.com',
+            'googleusercontent.com',
+            'cloudflare',
+            'r2.cloudflarestorage.com'
+        ]
+        for domain in external_domains:
+            if domain in url:
+                return url
             
         # Extract path from MinIO URL
         # Format: http://localhost:9000/travel-photos/places/.../photo.jpg
@@ -514,11 +538,13 @@ class PhotoService:
         try:
             from app.core.config import settings
             parsed = urllib.parse.urlparse(url)
-            # Get path after bucket name
-            path_parts = parsed.path.split('/', 2)  # ['', 'travel-photos', 'places/...']
-            if len(path_parts) >= 3:
-                object_path = path_parts[2]  # 'places/...'
-                return f"{settings.api_base_url}/photos/minio-proxy?path={urllib.parse.quote(object_path)}"
+            # Only proxy localhost URLs (MinIO)
+            if 'localhost' in parsed.netloc or '127.0.0.1' in parsed.netloc or ':9000' in parsed.netloc:
+                # Get path after bucket name
+                path_parts = parsed.path.split('/', 2)  # ['', 'travel-photos', 'places/...']
+                if len(path_parts) >= 3:
+                    object_path = path_parts[2]  # 'places/...'
+                    return f"{settings.api_base_url}/photos/minio-proxy?path={urllib.parse.quote(object_path)}"
         except:
             pass
         
