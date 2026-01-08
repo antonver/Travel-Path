@@ -31,22 +31,36 @@ def download_sample_car_image():
         raise Exception(f"Failed to download image: {response.status_code}")
 
 
-def test_upload_photo():
+def test_upload_photo(use_tls=False):
     """Test uploading a photo via gRPC"""
     
-    # Server address
-    server = "travelpath.cocktails.rocks:50051"
-    
-    print(f"🔗 Connecting to gRPC server: {server}")
-    
-    # Create channel (without TLS for port 50051)
-    channel = grpc.insecure_channel(
-        server,
-        options=[
-            ('grpc.max_send_message_length', 50 * 1024 * 1024),
-            ('grpc.max_receive_message_length', 50 * 1024 * 1024),
-        ]
-    )
+    if use_tls:
+        # gRPC over TLS (port 443 through Caddy)
+        server = "travelpath.cocktails.rocks:443"
+        print(f"🔗 Connecting to gRPC server (TLS): {server}")
+        
+        # Use secure channel with default SSL credentials
+        credentials = grpc.ssl_channel_credentials()
+        channel = grpc.secure_channel(
+            server,
+            credentials,
+            options=[
+                ('grpc.max_send_message_length', 50 * 1024 * 1024),
+                ('grpc.max_receive_message_length', 50 * 1024 * 1024),
+            ]
+        )
+    else:
+        # gRPC without TLS (direct port 50051)
+        server = "travelpath.cocktails.rocks:50051"
+        print(f"🔗 Connecting to gRPC server (plaintext): {server}")
+        
+        channel = grpc.insecure_channel(
+            server,
+            options=[
+                ('grpc.max_send_message_length', 50 * 1024 * 1024),
+                ('grpc.max_receive_message_length', 50 * 1024 * 1024),
+            ]
+        )
     
     # Create stub
     stub = photo_service_pb2_grpc.PhotoServiceStub(channel)
@@ -123,7 +137,14 @@ if __name__ == "__main__":
     print("=" * 50)
     print()
     
-    success = test_upload_photo()
+    # Try plaintext first (port 50051)
+    print("Trying plaintext connection (port 50051)...")
+    success = test_upload_photo(use_tls=False)
+    
+    if not success:
+        print("\n" + "-" * 50)
+        print("Trying TLS connection (port 443)...")
+        success = test_upload_photo(use_tls=True)
     
     print()
     if success:
@@ -132,4 +153,3 @@ if __name__ == "__main__":
     else:
         print("💥 Test failed!")
         sys.exit(1)
-

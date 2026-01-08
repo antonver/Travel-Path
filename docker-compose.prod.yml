@@ -1,50 +1,25 @@
 version: '3.8'
 
 # Production configuration for DigitalOcean Droplet
-# Uses Cloudflare R2 for object storage
-# Caddy for automatic HTTPS
+# Uses Cloudflare R2 for object storage (no local MinIO needed)
+# Caddy runs separately via systemd for HTTPS
 
 services:
-  caddy:
-    image: caddy:2-alpine
-    container_name: travel-caddy
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - backend
-    restart: unless-stopped
-
   backend:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: travel-backend
+    env_file:
+      - .env
     ports:
-      - "50051:50051"  # gRPC port (no HTTPS, direct connection)
-    expose:
-      - "8000"  # Only accessible via Caddy
+      - "8000:8000"
+      - "50051:50051"  # gRPC port for partner app
     volumes:
       - ./serviceAccountKey.json:/app/serviceAccountKey.json:ro
     environment:
       PROJECT_NAME: TravelPath
       FIREBASE_CREDENTIALS_PATH: /app/serviceAccountKey.json
-      MAPS_API_KEY: ${MAPS_API_KEY}
-      
-      # Cloudflare R2 settings
-      MINIO_ENDPOINT: ${R2_ENDPOINT}
-      MINIO_ROOT_USER: ${R2_ACCESS_KEY_ID}
-      MINIO_ROOT_PASSWORD: ${R2_SECRET_ACCESS_KEY}
-      MINIO_BUCKET_NAME: ${R2_BUCKET_NAME:-travel-photos}
-      MINIO_USE_SSL: "true"
-      MINIO_REGION: auto
-      
-      # Server settings
-      BASE_URL: ${BASE_URL}
       GRPC_PORT: 50051
     restart: unless-stopped
     healthcheck:
@@ -53,10 +28,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-volumes:
-  caddy_data:
-  caddy_config:
 
 networks:
   default:
