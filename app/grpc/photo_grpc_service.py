@@ -9,6 +9,7 @@ import io
 from datetime import datetime
 from typing import Optional, List
 import pygeohash as pgh
+import httpx
 
 # These will be generated from proto file
 # For now we'll use a REST-based fallback
@@ -147,9 +148,35 @@ class PhotoService:
                 # Also set as thumbnail if not provided
                 if not uploaded_thumbnail_url:
                     uploaded_thumbnail_url = photo_url
-            else:
-                # Use provided media_uris
-                uploaded_media_urls = media_uris
+            elif media_uris:
+                # Download external photos and upload to R2
+                for idx, external_url in enumerate(media_uris):
+                    try:
+                        downloaded_url = await self._download_and_upload_to_r2(
+                            external_url=external_url,
+                            photo_id=photo_id,
+                            author_id=author_id,
+                            timestamp_str=timestamp_str,
+                            idx=idx,
+                            location_name=location_name,
+                            category=category,
+                            visibility=visibility,
+                            source_app=source_app
+                        )
+                        if downloaded_url:
+                            uploaded_media_urls.append(downloaded_url)
+                            logger.info(f"📥 Downloaded and uploaded to R2: {external_url[:50]}...")
+                        else:
+                            # Fallback to original URL if download fails
+                            uploaded_media_urls.append(external_url)
+                            logger.warning(f"⚠️ Using original URL (download failed): {external_url[:50]}...")
+                    except Exception as e:
+                        logger.error(f"❌ Error downloading {external_url}: {e}")
+                        uploaded_media_urls.append(external_url)
+                
+                # Set thumbnail from first uploaded photo
+                if uploaded_media_urls and not uploaded_thumbnail_url:
+                    uploaded_thumbnail_url = uploaded_media_urls[0]
             
             # Save metadata to Firestore in new Photo format
             self._save_photo_to_firestore(
@@ -459,6 +486,73 @@ class PhotoService:
         except Exception as e:
             logger.error(f"MinIO upload error: {str(e)}")
             raise
+    
+    async def _download_and_upload_to_r2(
+        self,
+        external_url: str,
+        photo_id: str,
+        author_id: str,
+        timestamp_str: str,
+        idx: int,
+        location_name: str,
+        category: str,
+        visibility: str,
+        source_app: str
+    ) -> Optional[str]:
+        """
+        Download photo from external URL (Firebase, etc.) and upload to R2/MinIO.
+        Returns the new R2 URL or None if failed.
+        """
+        try:
+            # Download photo from external URL
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                response = await client.get(external_url)
+                response.raise_for_status()
+                
+                photo_data = response.content
+                content_type = response.headers.get('content-type', 'image/jpeg')
+                
+                # Determine file extension from content type
+                ext = "jpg"
+                if "png" in content_type:
+                    ext = "png"
+                elif "webp" in content_type:
+                    ext = "webp"
+                elif "gif" in content_type:
+                    ext = "gif"
+                
+                # Create object path
+                if author_id:
+                    object_path = f"photos/{author_id}/{timestamp_str}_{photo_id}_{idx}.{ext}"
+                else:
+                    object_path = f"photos/partner/{timestamp_str}_{photo_id}_{idx}.{ext}"
+                
+                # Upload to R2/MinIO
+                r2_url = self._upload_to_minio(
+                    photo_data=photo_data,
+                    object_path=object_path,
+                    content_type=content_type,
+                    metadata={
+                        "photo_id": photo_id,
+                        "author_id": author_id or "",
+                        "location_name": location_name,
+                        "category": category,
+                        "visibility": visibility,
+                        "source_app": source_app,
+                        "original_url": external_url[:200],  # Truncate for metadata
+                        "uploaded_at": datetime.utcnow().isoformat()
+                    }
+                )
+                
+                logger.info(f"✅ Downloaded {len(photo_data)} bytes and uploaded to R2")
+                return r2_url
+                
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error downloading {external_url}: {e.response.status_code}")
+            return None
+        except Exception as e:
+            logger.error(f"Error downloading and uploading to R2: {str(e)}")
+            return None
     
     def _save_place_photo_metadata_to_firestore(
         self,
