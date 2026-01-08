@@ -533,14 +533,16 @@ class PhotoService:
     ) -> list:
         """
         Get photos for a place by Google Place ID or coordinates.
-        Searches both MinIO metadata and Firestore.
+        Searches BOTH collections:
+        - 'place_photos' (legacy REST uploads)
+        - 'photos' (new gRPC uploads)
         
         Returns list of proxy URLs (accessible from Android).
         """
         photo_urls = []
         
         try:
-            # Method 1: Search Firestore by place_id
+            # Method 1: Search legacy 'place_photos' collection by place_id
             if place_id:
                 photos_ref = self.firebase.db.collection("place_photos")
                 query = photos_ref.where("place_id", "==", place_id).limit(max_photos)
@@ -548,20 +550,54 @@ class PhotoService:
                 for doc in query.stream():
                     data = doc.to_dict()
                     if data.get("photo_url"):
-                        # Convert to proxy URL
                         proxy_url = self._convert_to_proxy_url(data["photo_url"])
                         photo_urls.append(proxy_url)
             
-            # Method 2: Search by coordinates (within ~100m radius)
+            # Method 2: Search NEW 'photos' collection by coordinates
             if latitude and longitude and len(photo_urls) < max_photos:
-                # Calculate rough coordinate bounds (~100m)
-                lat_delta = 0.001  # ~111m
-                lng_delta = 0.001  # varies by latitude
+                lat_delta = 0.002  # ~200m radius
+                lng_delta = 0.002
+                
+                photos_ref = self.firebase.db.collection("photos")
+                query = photos_ref.limit(100)
+                
+                for doc in query.stream():
+                    if len(photo_urls) >= max_photos:
+                        break
+                    
+                    data = doc.to_dict()
+                    geo_point = data.get("geoPoint")
+                    
+                    if geo_point:
+                        doc_lat = geo_point.latitude if hasattr(geo_point, 'latitude') else None
+                        doc_lng = geo_point.longitude if hasattr(geo_point, 'longitude') else None
+                        
+                        if doc_lat and doc_lng:
+                            if (abs(doc_lat - latitude) <= lat_delta and 
+                                abs(doc_lng - longitude) <= lng_delta):
+                                # Get URLs from mediaUris
+                                media_uris = data.get("mediaUris", [])
+                                for url in media_uris:
+                                    if url and url not in photo_urls:
+                                        proxy_url = self._convert_to_proxy_url(url)
+                                        photo_urls.append(proxy_url)
+                                        if len(photo_urls) >= max_photos:
+                                            break
+                                
+                                # Also check thumbnailUrl
+                                thumb = data.get("thumbnailUrl")
+                                if thumb and thumb not in photo_urls and len(photo_urls) < max_photos:
+                                    proxy_url = self._convert_to_proxy_url(thumb)
+                                    if proxy_url not in photo_urls:
+                                        photo_urls.append(proxy_url)
+            
+            # Method 3: Search legacy by coordinates
+            if latitude and longitude and len(photo_urls) < max_photos:
+                lat_delta = 0.001
+                lng_delta = 0.001
                 
                 photos_ref = self.firebase.db.collection("place_photos")
-                # Note: Firestore doesn't support multiple inequality filters
-                # We'll filter in Python
-                query = photos_ref.limit(100)  # Get batch and filter
+                query = photos_ref.limit(100)
                 
                 for doc in query.stream():
                     if len(photo_urls) >= max_photos:
@@ -573,7 +609,6 @@ class PhotoService:
                     doc_lng = loc.get("lng")
                     
                     if doc_lat and doc_lng:
-                        # Check if within bounds
                         if (abs(doc_lat - latitude) <= lat_delta and 
                             abs(doc_lng - longitude) <= lng_delta):
                             url = data.get("photo_url")
