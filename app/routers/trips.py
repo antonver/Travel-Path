@@ -800,20 +800,21 @@ async def save_route(
     """
     try:
         user_id = current_user["uid"]
-        logger.info(f"💾 Saving route for user: {user_id}")
+        logger.info(f"💾 Saving route for user: {user_id}, location: {request.location}")
         
-        # Check if this route is already saved by this user
+        # Check if this EXACT route (same type + same location) is already saved
         existing_routes = firebase_service.db.collection("saved_routes")\
             .where("user_id", "==", user_id)\
             .where("route.id", "==", request.route.id)\
+            .where("location", "==", request.location)\
             .limit(1)\
             .stream()
         
         for doc in existing_routes:
-            logger.info(f"⚠️ Route {request.route.id} already saved by user {user_id}")
+            logger.info(f"⚠️ Route {request.route.id} for {request.location} already saved by user {user_id}")
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Ce parcours est déjà enregistré"
+                detail=f"Ce parcours ({request.route.name}) pour {request.location} est déjà enregistré"
             )
         
         # Generate unique ID for saved route
@@ -848,6 +849,10 @@ async def save_route(
         logger.info(f"✅ Route saved successfully: {saved_route_id} for user {user_id}")
         
         return saved_route
+    
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 409 Conflict) as-is
+        raise
         
     except Exception as e:
         logger.error(f"❌ Error saving route: {str(e)}")
